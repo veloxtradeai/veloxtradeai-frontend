@@ -49,14 +49,8 @@ function App() {
     handleResize();
     window.addEventListener('resize', handleResize);
     
-    // Check authentication
-    const token = localStorage.getItem('velox_auth_token');
-    if (!token) {
-      setIsLoading(false);
-    } else {
-      // Simulate loading for 1 second
-      setTimeout(() => setIsLoading(false), 1000);
-    }
+    // Check authentication - show loading for 1 second
+    setTimeout(() => setIsLoading(false), 1000);
     
     return () => window.removeEventListener('resize', handleResize);
   }, []);
@@ -94,12 +88,16 @@ function App() {
                   {/* Public Routes */}
                   <Route path="/login" element={
                     <PublicRoute>
-                      <Login />
+                      <Suspense fallback={<div className="flex justify-center items-center h-screen"><div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div></div>}>
+                        <Login />
+                      </Suspense>
                     </PublicRoute>
                   } />
                   <Route path="/register" element={
                     <PublicRoute>
-                      <Register />
+                      <Suspense fallback={<div className="flex justify-center items-center h-screen"><div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div></div>}>
+                        <Register />
+                      </Suspense>
                     </PublicRoute>
                   } />
                   
