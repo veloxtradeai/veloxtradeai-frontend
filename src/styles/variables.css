@@ -1,0 +1,88 @@
+/* Theme Classes */
+.light-theme {
+  --primary-color: #3b82f6;
+  --secondary-color: #8b5cf6;
+  --background-color: #f9fafb;
+  --sidebar-bg: #1f2937;
+  --text-color: #111827;
+  --card-bg: #ffffff;
+  --border-color: #e5e7eb;
+}
+
+.dark-theme {
+  --primary-color: #60a5fa;
+  --secondary-color: #a78bfa;
+  --background-color: #111827;
+  --sidebar-bg: #0f172a;
+  --text-color: #f9fafb;
+  --card-bg: #1e293b;
+  --border-color: #374151;
+}
+
+.blue-theme {
+  --primary-color: #0ea5e9;
+  --secondary-color: #38bdf8;
+  --background-color: #f0f9ff;
+  --sidebar-bg: #0c4a6e;
+  --text-color: #0c4a6e;
+  --card-bg: #e0f2fe;
+  --border-color: #7dd3fc;
+}
+
+.green-theme {
+  --primary-color: #10b981;
+  --secondary-color: #34d399;
+  --background-color: #ecfdf5;
+  --sidebar-bg: #064e3b;
+  --text-color: #064e3b;
+  --card-bg: #d1fae5;
+  --border-color: #6ee7b7;
+}
+
+.purple-theme {
+  --primary-color: #8b5cf6;
+  --secondary-color: #c4b5fd;
+  --background-color: #faf5ff;
+  --sidebar-bg: #5b21b6;
+  --text-color: #5b21b6;
+  --card-bg: #ede9fe;
+  --border-color: #a78bfa;
+}
+
+/* Apply theme variables */
+[data-theme] {
+  --color-primary-500: var(--primary-color);
+  --color-primary-600: var(--primary-color);
+  --color-secondary-500: var(--secondary-color);
+  background-color: var(--background-color);
+  color: var(--text-color);
+}
+
+[data-theme] .bg-gray-50 {
+  background-color: var(--background-color);
+}
+
+[data-theme] .bg-white {
+  background-color: var(--card-bg);
+}
+
+[data-theme] .border-gray-200 {
+  border-color: var(--border-color);
+}
+
+[data-theme] .text-gray-900 {
+  color: var(--text-color);
+}
+
+[data-theme] .text-gray-600 {
+  color: var(--text-color);
+  opacity: 0.8;
+}
+
+[data-theme] .bg-gray-900 {
+  background-color: var(--sidebar-bg);
+}
+
+[data-theme] .border-gray-800 {
+  border-color: var(--border-color);
+}

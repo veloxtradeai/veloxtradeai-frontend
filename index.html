@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.ico" />
+    
+    <!-- MOBILE VIEWPORT - VERY IMPORTANT -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    
+    <meta name="description" content="AI-powered stock trading platform with real-time recommendations and automated trading">
+    <meta name="keywords" content="trading, stocks, ai, finance, investment, intraday">
+    <meta name="author" content="VeloxTradeAI">
+    
+    <!-- PWA Configuration -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#3b82f6">
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- iOS Safari specific -->
+    <meta name="apple-mobile-web-app-title" content="VeloxTradeAI">
+    
+    <!-- Windows specific -->
+    <meta name="msapplication-TileColor" content="#3b82f6">
+    
+    <title>VeloxTradeAI - AI Stock Trading Platform</title>
+    
+    <style>
+      /* Prevent blue highlight on mobile tap */
+      * {
+        -webkit-tap-highlight-color: transparent;
+      }
+      
+      /* Prevent text size adjustment on mobile */
+      html {
+        -webkit-text-size-adjust: 100%;
+        text-size-adjust: 100%;
+      }
+      
+      /* Prevent pull-to-refresh on mobile */
+      body {
+        overscroll-behavior-y: contain;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/index.jsx"></script>
+  </body>
+</html>
