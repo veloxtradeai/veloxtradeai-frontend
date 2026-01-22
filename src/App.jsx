@@ -11,7 +11,7 @@ import Analytics from './pages/Analytics';
 import BrokerSettings from './pages/BrokerSettings'; // ✅ यहाँ सुधार
 import Settings from './pages/Settings';
 import Sidebar from './components/Sidebar';
-import LiveMarketWidget from './components/LiveMarketWidget';
+// import LiveMarketWidget from './components/LiveMarketWidget';
 
 // API Services
 import api from './services/api';
@@ -196,12 +196,11 @@ function App() {
                 <span className="premium-badge">Premium Member</span>
               </div>
               <div className="top-bar-right">
-                <LiveMarketWidget data={marketData.slice(0, 5)} />
-                <div className="user-info">
-                  <span className="user-name">{user.name}</span>
-                  <span className="user-email">{user.email}</span>
-                </div>
-              </div>
+  <div className="user-info">
+    <span className="user-name">{user.name}</span>
+    <span className="user-email">{user.email}</span>
+  </div>
+</div>
             </div>
 
             {/* Broker Connection Modal - Shows if broker not connected */}
