@@ -1,109 +1,222 @@
-// Frontend-only API service (mock API calls)
-const API_BASE_URL = 'http://localhost:5000/api';
+// API Base URL
+const API_BASE_URL = 'https://veloxtradeai-api.velox-trade-ai.workers.dev';
 
-// Mock API calls for frontend
-const stocksAPI = {
-  getRecommendations: async () => {
-    // This will be replaced by real API in production
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve({
-          success: true,
-          data: [],
-          message: 'Stock recommendations will load from API'
-        });
-      }, 1000);
-    });
-  },
+// Auth token storage
+const getToken = () => localStorage.getItem('veloxtradeai_token');
+const setToken = (token) => localStorage.setItem('veloxtradeai_token', token);
+const removeToken = () => localStorage.removeItem('veloxtradeai_token');
 
-  getRealTimeData: async (symbols) => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const data = symbols.reduce((acc, symbol) => {
-          acc[symbol] = {
-            price: 0,
-            change: 0,
-            volume: 0
-          };
-          return acc;
-        }, {});
-        resolve(data);
-      }, 500);
-    });
-  },
+// API Request helper
+const apiRequest = async (endpoint, method = 'GET', data = null, useAuth = true) => {
+  const headers = {
+    'Content-Type': 'application/json',
+  };
 
-  placeOrder: async (orderData) => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve({
-          success: true,
-          orderId: 'MOCK_' + Date.now(),
-          message: 'Order placed successfully (mock)'
-        });
-      }, 1500);
-    });
+  if (useAuth) {
+    const token = getToken();
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+  }
+
+  const config = {
+    method,
+    headers,
+  };
+
+  if (data && (method === 'POST' || method === 'PUT')) {
+    config.body = JSON.stringify(data);
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
+    
+    if (response.status === 401) {
+      removeToken();
+      window.location.href = '/login';
+      return;
+    }
+
+    const result = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(result.message || 'API request failed');
+    }
+
+    return result;
+  } catch (error) {
+    console.error('API Error:', error);
+    throw error;
   }
 };
 
-const authAPI = {
-  login: async (email, password) => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve({
-          success: true,
-          token: 'mock_token_' + Date.now(),
-          user: {
-            id: '1',
-            name: 'Demo User',
-            email: email,
-            subscriptionStatus: 'trial',
-            trialDays: 7
-          }
-        });
-      }, 1000);
-    });
+// ======================
+// AUTHENTICATION APIs
+// ======================
+export const authAPI = {
+  register: (userData) => apiRequest('/api/auth/register', 'POST', userData, false),
+  
+  login: (email, password) => 
+    apiRequest('/api/auth/login', 'POST', { email, password }, false),
+  
+  logout: () => {
+    removeToken();
+    window.location.href = '/login';
   },
 
-  register: async (userData) => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve({
-          success: true,
-          user: {
-            id: Date.now().toString(),
-            ...userData,
-            subscriptionStatus: 'trial',
-            trialDays: 7
-          }
-        });
-      }, 1500);
-    });
+  getCurrentUser: () => {
+    const token = getToken();
+    if (!token) return null;
+    
+    try {
+      // Decode JWT token (if using JWT)
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      return payload;
+    } catch {
+      return null;
+    }
   }
 };
 
-const brokerAPI = {
-  connectBroker: async (brokerId, credentials) => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve({
-          success: true,
-          brokerId,
-          message: 'Broker connected successfully (mock)'
-        });
-      }, 2000);
-    });
-  },
+// ======================
+// MARKET DATA APIs
+// ======================
+export const marketAPI = {
+  getLiveData: (symbols = 'RELIANCE,TCS,HDFCBANK,INFY,ICICIBANK') =>
+    apiRequest(`/api/market/live?symbols=${symbols}`),
 
-  getHoldings: async (brokerId) => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve({
-          success: true,
-          holdings: []
-        });
-      }, 1000);
-    });
-  }
+  getStockData: (symbol) =>
+    apiRequest(`/api/market/stock?symbol=${symbol}`),
 };
 
-export { stocksAPI, authAPI, brokerAPI, API_BASE_URL };
+// ======================
+// AI TRADING APIs
+// ======================
+export const tradingAPI = {
+  // AI Stock Screener
+  getAIScreener: (filters = {}) =>
+    apiRequest('/api/ai/screener', 'POST', { filters }),
+
+  // Get Trading Signals
+  getSignals: () =>
+    apiRequest('/api/ai/signal'),
+
+  // Calculate Levels
+  calculateLevels: (symbol) =>
+    apiRequest('/api/ai/levels', 'POST', { symbol }),
+
+  // Generate Real-time Signal
+  generateSignal: (stockData) =>
+    apiRequest('/api/ai/generate-signal', 'POST', stockData),
+};
+
+// ======================
+// BROKER APIs
+// ======================
+export const brokerAPI = {
+  // Connect Broker
+  connectBroker: (brokerData) =>
+    apiRequest('/api/broker/connect', 'POST', brokerData),
+
+  // Get Connected Brokers
+  getBrokers: (userId) =>
+    apiRequest(`/api/broker/data?user_id=${userId}`),
+
+  // Place Order
+  placeOrder: (orderData) =>
+    apiRequest('/api/broker/place-order', 'POST', orderData),
+
+  // Test Connection
+  testConnection: (brokerId) =>
+    apiRequest(`/api/broker/test/${brokerId}`),
+};
+
+// ======================
+// TRADE MANAGEMENT APIs
+// ======================
+export const tradeAPI = {
+  // Get All Trades
+  getTrades: (userId) =>
+    apiRequest(`/api/trades?user_id=${userId}`),
+
+  // Add New Trade
+  addTrade: (tradeData) =>
+    apiRequest('/api/trades', 'POST', tradeData),
+
+  // Update Trade
+  updateTrade: (tradeId, updates) =>
+    apiRequest(`/api/trades/${tradeId}`, 'PUT', updates),
+
+  // Auto Adjust SL/TGT
+  autoAdjust: (tradeId, currentPrice) =>
+    apiRequest('/api/trades/auto-adjust', 'POST', { trade_id: tradeId, current_price: currentPrice }),
+
+  // Close Trade
+  closeTrade: (tradeId) =>
+    apiRequest(`/api/trades/${tradeId}/close`, 'POST'),
+};
+
+// ======================
+// PORTFOLIO APIs
+// ======================
+export const portfolioAPI = {
+  getAnalytics: (userId) =>
+    apiRequest(`/api/analytics/portfolio?user_id=${userId}`),
+
+  getPerformance: (userId, period = 'monthly') =>
+    apiRequest(`/api/analytics/performance?user_id=${userId}&period=${period}`),
+
+  getRiskMetrics: (userId) =>
+    apiRequest(`/api/analytics/risk-metrics?user_id=${userId}`),
+};
+
+// ======================
+// REAL-TIME WebSocket
+// ======================
+export const setupWebSocket = (onMessage) => {
+  // WebSocket for real-time updates
+  const ws = new WebSocket(`wss://veloxtradeai-api.velox-trade-ai.workers.dev/ws`);
+  
+  ws.onopen = () => {
+    console.log('WebSocket connected');
+    // Send authentication token
+    const token = getToken();
+    if (token) {
+      ws.send(JSON.stringify({ type: 'auth', token }));
+    }
+  };
+
+  ws.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      onMessage(data);
+    } catch (error) {
+      console.error('WebSocket message error:', error);
+    }
+  };
+
+  ws.onerror = (error) => {
+    console.error('WebSocket error:', error);
+  };
+
+  ws.onclose = () => {
+    console.log('WebSocket disconnected');
+    // Try to reconnect after 5 seconds
+    setTimeout(() => setupWebSocket(onMessage), 5000);
+  };
+
+  return ws;
+};
+
+// ======================
+// EXPORT ALL APIs
+// ======================
+export default {
+  auth: authAPI,
+  market: marketAPI,
+  trading: tradingAPI,
+  broker: brokerAPI,
+  trade: tradeAPI,
+  portfolio: portfolioAPI,
+  setupWebSocket,
+};
