@@ -8,7 +8,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import Analytics from './pages/Analytics';
-import Brokers from './pages/Brokers';
+import BrokerSettings from './pages/BrokerSettings'; // ✅ यहाँ सुधार
 import Settings from './pages/Settings';
 import Sidebar from './components/Sidebar';
 import LiveMarketWidget from './components/LiveMarketWidget';
@@ -230,8 +230,8 @@ function App() {
                     marketData={marketData}
                   />
                 } />
-                <Route path="/brokers" element={
-                  <Brokers 
+                <Route path="/brokers" element={ // ✅ यहाँ भी सुधार
+                  <BrokerSettings 
                     user={user}
                     brokerConnected={brokerConnected}
                     onConnect={handleBrokerConnect}
