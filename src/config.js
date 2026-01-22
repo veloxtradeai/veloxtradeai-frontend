@@ -1,88 +1,45 @@
+// src/config.js
 const config = {
-  // API Configuration
-  API_BASE_URL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
+  // API URLs
+  API_BASE_URL: import.meta.env.VITE_API_BASE_URL || 'https://veloxtradeai-api.velox-trade-ai.workers.dev',
+  FRONTEND_URL: import.meta.env.VITE_FRONTEND_URL || 'https://veloxtradeai-frontend.pages.dev',
   
-  // Broker Configuration
-  BROKERS: {
-    ZERODHA: 'zerodha',
-    GROWW: 'groww',
-    UPSTOX: 'upstox',
-    ANGEL: 'angel',
-    CHOICE: 'choice',
-    NIFTY_CORE: 'nifty_core'
-  },
+  // App Info
+  APP_NAME: import.meta.env.VITE_APP_NAME || 'VeloxTradeAI',
+  APP_VERSION: import.meta.env.VITE_APP_VERSION || '1.0.0',
+  APP_ENV: import.meta.env.VITE_APP_ENV || 'production',
   
-  // Stock Exchange
-  EXCHANGES: {
-    NSE: 'NSE',
-    BSE: 'BSE'
-  },
+  // Trading Settings
+  MAX_RISK_PER_TRADE: parseFloat(import.meta.env.VITE_MAX_RISK_PER_TRADE) || 2.5,
+  MIN_CONFIDENCE: parseInt(import.meta.env.VITE_MIN_CONFIDENCE) || 85,
+  SIGNAL_EXPIRE_MINUTES: parseInt(import.meta.env.VITE_SIGNAL_EXPIRE_MINUTES) || 15,
   
-  // Trade Types
-  TRADE_TYPES: {
-    INTRADAY: 'intraday',
-    SWING: 'swing',
-    POSITIONAL: 'positional'
-  },
+  // Market Hours
+  MARKET_OPEN_HOUR: parseInt(import.meta.env.VITE_MARKET_OPEN_HOUR) || 9,
+  MARKET_CLOSE_HOUR: parseInt(import.meta.env.VITE_MARKET_CLOSE_HOUR) || 15,
+  MARKET_DAYS: (import.meta.env.VITE_MARKET_DAYS || '1,2,3,4,5').split(',').map(Number),
   
-  // Subscription Plans
-  PLANS: {
-    FREE: { id: 1, name: 'Free Trial', price: 0, duration: '7 days' },
-    BASIC: { id: 2, name: 'Basic', price: 999, duration: 'month' },
-    PRO: { id: 3, name: 'Pro', price: 1999, duration: 'month', popular: true },
-    PREMIUM: { id: 4, name: 'Premium', price: 4999, duration: '3 months' }
-  },
+  // Feature Flags
+  ENABLE_REALTIME_SIGNALS: import.meta.env.VITE_ENABLE_REALTIME_SIGNALS === 'true',
+  ENABLE_AUTO_ADJUST: import.meta.env.VITE_ENABLE_AUTO_ADJUST === 'true',
+  ENABLE_BROKER_INTEGRATION: import.meta.env.VITE_ENABLE_BROKER_INTEGRATION === 'true',
+  ENABLE_PUSH_NOTIFICATIONS: import.meta.env.VITE_ENABLE_PUSH_NOTIFICATIONS === 'true',
   
-  // App Settings
-  APP_NAME: 'VeloxTradeAI',
-  VERSION: '2.0.0',
+  // WebSocket
+  WS_RECONNECT_INTERVAL: parseInt(import.meta.env.VITE_WS_RECONNECT_INTERVAL) || 5000,
+  WS_HEARTBEAT_INTERVAL: parseInt(import.meta.env.VITE_WS_HEARTBEAT_INTERVAL) || 30000,
   
-  // Time Intervals for Real-time Updates (in seconds)
-  UPDATE_INTERVALS: {
-    STOCK_DATA: 30,
-    PORTFOLIO: 60,
-    RECOMMENDATIONS: 300,
-    LIVE_PRICES: 10
-  },
+  // Performance
+  CACHE_TTL: parseInt(import.meta.env.VITE_CACHE_TTL) || 300000,
+  DATA_FETCH_INTERVAL: parseInt(import.meta.env.VITE_DATA_FETCH_INTERVAL) || 30000,
   
-  // Default Settings
-  DEFAULTS: {
-    RISK_LEVEL: 'medium',
-    CAPITAL: 100000,
-    MAX_POSITIONS: 5,
-    STOP_LOSS: 2, // in percentage
-    TARGET_PROFIT: 4 // in percentage
-  },
-
-  // Mobile-specific settings
-  MOBILE: {
-    MIN_WIDTH: 320,
-    BREAKPOINTS: {
-      SM: 640,
-      MD: 768,
-      LG: 1024,
-      XL: 1280
-    }
-  },
-
-  // Chart Configuration
-  CHART: {
-    COLORS: {
-      UP: '#10b981',
-      DOWN: '#ef4444',
-      NEUTRAL: '#6b7280'
-    },
-    PERIODS: ['1D', '1W', '1M', '3M', '6M', '1Y', 'ALL']
-  },
-
-  // Local Storage Keys
-  STORAGE_KEYS: {
-    AUTH_TOKEN: 'velox_auth_token',
-    USER_DATA: 'velox_user',
-    THEME: 'velox_theme',
-    BROKER_SETTINGS: 'velox_broker_settings',
-    WATCHLIST: 'velox_watchlist'
-  }
+  // Debug
+  DEBUG: import.meta.env.VITE_DEBUG === 'true',
+  LOG_LEVEL: import.meta.env.VITE_LOG_LEVEL || 'info',
+  
+  // Broker URLs
+  ZERODHA_REDIRECT_URI: import.meta.env.VITE_ZERODHA_REDIRECT_URI,
+  ANGEL_REDIRECT_URI: import.meta.env.VITE_ANGEL_REDIRECT_URI,
 };
 
 export default config;
