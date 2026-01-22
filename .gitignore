@@ -49,6 +49,18 @@ pids
 ehthumbs.db
 Thumbs.db
 
+# Environment variables
+.env
+.env.local
+.env.development
+.env.production
+.env.test
+
+# Sensitive data
+*.pem
+*.key
+*.cert
+
 # Testing
 .vitest/
 
