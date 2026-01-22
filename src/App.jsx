@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
-import { Toaster } from 'react-hot-toast';
 
 // Components
 import TradingPopup from './components/TradingPopup';
@@ -41,6 +40,9 @@ function App() {
       
       if (token && storedUser) {
         setUser(JSON.parse(storedUser));
+      } else {
+        // If no user, redirect to login
+        navigate('/login');
       }
 
       // Check broker connection
@@ -172,30 +174,6 @@ function App() {
 
   return (
     <div className="App">
-      <Toaster 
-        position="top-right"
-        toastOptions={{
-          duration: 4000,
-          style: {
-            background: '#1e293b',
-            color: '#fff',
-            border: '1px solid #3b82f6'
-          },
-          success: {
-            iconTheme: {
-              primary: '#22c55e',
-              secondary: '#fff',
-            },
-          },
-          error: {
-            iconTheme: {
-              primary: '#ef4444',
-              secondary: '#fff',
-            },
-          },
-        }}
-      />
-
       {/* Trading Popup - Automatically shows for high confidence signals */}
       <TradingPopup signals={signals} onTradePlaced={fetchSignals} />
 
