@@ -1,12 +1,10 @@
 // API Base URL - CORRECT THIS BASED ON YOUR CLOUDFLARE WORKER
-const API_BASE_URL = 'https://veloxtradeai-api.veloxtradeai.workers.dev';
-// OR use this if above doesn't work:
-// const API_BASE_URL = 'https://veloxtradeai-api.velox-trade-ai.workers.dev';
+const API_BASE_URL = 'https://veloxtradeai-api.velox-trade-ai.workers.dev';
 
-// Auth token storage
-const getToken = () => localStorage.getItem('veloxtradeai_token');
-const setToken = (token) => localStorage.setItem('veloxtradeai_token', token);
-const removeToken = () => localStorage.removeItem('veloxtradeai_token');
+// Auth token storage - IMPORTANT: Use same key as App.jsx
+const getToken = () => localStorage.getItem('velox_auth_token');
+const setToken = (token) => localStorage.setItem('velox_auth_token', token);
+const removeToken = () => localStorage.removeItem('velox_auth_token');
 
 // API Request helper
 const apiRequest = async (endpoint, method = 'GET', data = null, useAuth = true) => {
@@ -25,6 +23,7 @@ const apiRequest = async (endpoint, method = 'GET', data = null, useAuth = true)
     method,
     headers,
     mode: 'cors', // Important for Cloudflare Workers
+    credentials: 'omit', // Cloudflare Workers don't need credentials
   };
 
   if (data && (method === 'POST' || method === 'PUT' || method === 'PATCH')) {
@@ -59,10 +58,9 @@ const apiRequest = async (endpoint, method = 'GET', data = null, useAuth = true)
     return result;
   } catch (error) {
     console.error('API Error:', error);
-    // Return a fallback response for development
     return {
       success: false,
-      message: error.message,
+      message: 'Network error. Please check your connection.',
       data: null
     };
   }
@@ -146,7 +144,13 @@ const mockData = {
 // Check if backend is available
 const isBackendAvailable = async () => {
   try {
-    const response = await fetch(API_BASE_URL + '/health', { method: 'GET', mode: 'cors' });
+    const response = await fetch(API_BASE_URL + '/health', { 
+      method: 'GET', 
+      mode: 'cors',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
     return response.ok;
   } catch {
     return false;
@@ -158,8 +162,17 @@ let useMockData = false;
 
 // Initialize backend check
 (async () => {
-  useMockData = !(await isBackendAvailable());
-  console.log('Backend available:', !useMockData);
+  try {
+    const available = await isBackendAvailable();
+    useMockData = !available;
+    console.log('Backend available:', available);
+    if (!available) {
+      console.log('Using mock data for development');
+    }
+  } catch (error) {
+    console.error('Backend check failed:', error);
+    useMockData = true;
+  }
 })();
 
 // ======================
@@ -168,18 +181,31 @@ let useMockData = false;
 export const authAPI = {
   register: async (userData) => {
     if (useMockData) {
-      return mockData.login;
+      // Auto login after registration
+      const result = { ...mockData.login };
+      setToken(result.token);
+      return result;
     }
-    return await apiRequest('/api/auth/register', 'POST', userData, false);
+    const result = await apiRequest('/api/auth/register', 'POST', userData, false);
+    if (result && result.success) {
+      setToken(result.token);
+    }
+    return result;
   },
   
   login: async (email, password) => {
     if (useMockData) {
       // Simulate API delay
       await new Promise(resolve => setTimeout(resolve, 500));
-      return mockData.login;
+      const result = { ...mockData.login };
+      setToken(result.token);
+      return result;
     }
-    return await apiRequest('/api/auth/login', 'POST', { email, password }, false);
+    const result = await apiRequest('/api/auth/login', 'POST', { email, password }, false);
+    if (result && result.success) {
+      setToken(result.token);
+    }
+    return result;
   },
   
   logout: () => {
@@ -187,7 +213,7 @@ export const authAPI = {
     window.location.href = '/login';
   },
 
-  getCurrentUser: () => {
+  getCurrentUser: async () => {
     const token = getToken();
     if (!token) return null;
     
@@ -197,9 +223,12 @@ export const authAPI = {
         return mockData.login.user;
       }
       
-      // Decode JWT token (if using JWT)
-      const payload = JSON.parse(atob(token.split('.')[1]));
-      return payload;
+      // Call API to get current user
+      const result = await apiRequest('/api/auth/me');
+      if (result && result.success) {
+        return result.user;
+      }
+      return null;
     } catch {
       return null;
     }
@@ -300,7 +329,7 @@ export const brokerAPI = {
   },
 
   // Get Connected Brokers
-  getBrokers: async (userId) => {
+  getBrokers: async () => {
     if (useMockData) {
       return {
         success: true,
@@ -310,7 +339,16 @@ export const brokerAPI = {
         ]
       };
     }
-    return await apiRequest(`/api/broker/data?user_id=${userId}`);
+    const token = getToken();
+    if (!token) return { success: false, brokers: [] };
+    
+    // Decode token to get user_id
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      return await apiRequest(`/api/broker/data?user_id=${payload.user_id || payload.id}`);
+    } catch {
+      return { success: false, brokers: [] };
+    }
   },
 
   // Place Order
@@ -335,7 +373,7 @@ export const brokerAPI = {
 // ======================
 export const tradeAPI = {
   // Get All Trades
-  getTrades: async (userId) => {
+  getTrades: async () => {
     if (useMockData) {
       return {
         success: true,
@@ -345,7 +383,15 @@ export const tradeAPI = {
         ]
       };
     }
-    return await apiRequest(`/api/trades?user_id=${userId}`);
+    const token = getToken();
+    if (!token) return { success: false, trades: [] };
+    
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      return await apiRequest(`/api/trades?user_id=${payload.user_id || payload.id}`);
+    } catch {
+      return { success: false, trades: [] };
+    }
   },
 
   // Add New Trade
@@ -385,14 +431,22 @@ export const tradeAPI = {
 // PORTFOLIO APIs
 // ======================
 export const portfolioAPI = {
-  getAnalytics: async (userId) => {
+  getAnalytics: async () => {
     if (useMockData) {
       return mockData.portfolio;
     }
-    return await apiRequest(`/api/analytics/portfolio?user_id=${userId}`);
+    const token = getToken();
+    if (!token) return { success: false, portfolio: null };
+    
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      return await apiRequest(`/api/analytics/portfolio?user_id=${payload.user_id || payload.id}`);
+    } catch {
+      return { success: false, portfolio: null };
+    }
   },
 
-  getPerformance: async (userId, period = 'monthly') => {
+  getPerformance: async (period = 'monthly') => {
     if (useMockData) {
       return {
         success: true,
@@ -403,10 +457,18 @@ export const portfolioAPI = {
         }
       };
     }
-    return await apiRequest(`/api/analytics/performance?user_id=${userId}&period=${period}`);
+    const token = getToken();
+    if (!token) return { success: false, performance: null };
+    
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      return await apiRequest(`/api/analytics/performance?user_id=${payload.user_id || payload.id}&period=${period}`);
+    } catch {
+      return { success: false, performance: null };
+    }
   },
 
-  getRiskMetrics: async (userId) => {
+  getRiskMetrics: async () => {
     if (useMockData) {
       return {
         success: true,
@@ -417,7 +479,15 @@ export const portfolioAPI = {
         }
       };
     }
-    return await apiRequest(`/api/analytics/risk-metrics?user_id=${userId}`);
+    const token = getToken();
+    if (!token) return { success: false, riskMetrics: null };
+    
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      return await apiRequest(`/api/analytics/risk-metrics?user_id=${payload.user_id || payload.id}`);
+    } catch {
+      return { success: false, riskMetrics: null };
+    }
   },
 };
 
@@ -447,7 +517,8 @@ export const setupWebSocket = (onMessage) => {
 
   // Real WebSocket implementation
   try {
-    const ws = new WebSocket(`wss://veloxtradeai-api.veloxtradeai.workers.dev/ws`);
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${wsProtocol}//veloxtradeai-api.velox-trade-ai.workers.dev/ws`);
     
     ws.onopen = () => {
       console.log('WebSocket connected');
