@@ -1,6 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import brokerIntegration from '../services/brokerIntegration';
-import storageService from '../services/storageService';
+import api from '../services/api';
 
 const BrokerContext = createContext();
 
@@ -25,7 +24,7 @@ export const BrokerProvider = ({ children }) => {
     loadConnections();
   }, []);
 
-  const loadBrokers = () => {
+  const loadBrokers = useCallback(() => {
     const availableBrokers = [
       { id: 'zerodha', name: 'Zerodha', logo: 'Z', color: 'blue', description: 'Largest stock broker in India' },
       { id: 'upstox', name: 'Upstox', logo: 'U', color: 'purple', description: 'Fastest trading platform' },
@@ -35,32 +34,39 @@ export const BrokerProvider = ({ children }) => {
     ];
     
     setBrokers(availableBrokers);
+  }, []);
+
+  const loadConnections = async () => {
+    setLoading(true);
+    try {
+      const result = await api.broker.getBrokers();
+      
+      if (result.success && result.brokers) {
+        setConnectedBrokers(result.brokers);
+      } else {
+        setConnectedBrokers([]);
+      }
+    } catch (error) {
+      console.error('Failed to load connections:', error);
+      setConnectedBrokers([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const loadConnections = () => {
-    const connections = brokerIntegration.getConnectedBrokers();
-    setConnectedBrokers(connections);
-    
-    // Load holdings from localStorage
-    const savedHoldings = storageService.portfolio.get().holdings;
-    setHoldings(savedHoldings);
-  };
-
-  const connectBroker = async (brokerId, credentials = {}) => {
+  const connectBroker = async (brokerData) => {
     setLoading(true);
     setError(null);
     
     try {
-      const result = await brokerIntegration.connectBroker(brokerId, credentials);
+      const result = await api.broker.connectBroker(brokerData);
       
       if (result.success) {
-        // Update connections list
-        const connections = brokerIntegration.getConnectedBrokers();
-        setConnectedBrokers(connections);
-        
+        await loadConnections();
         return { success: true, message: result.message };
       } else {
-        throw new Error(result.message || 'Connection failed');
+        setError(result.message);
+        return { success: false, error: result.message };
       }
     } catch (err) {
       setError(err.message);
@@ -72,20 +78,11 @@ export const BrokerProvider = ({ children }) => {
 
   const disconnectBroker = async (brokerId) => {
     try {
-      const result = await brokerIntegration.disconnectBroker(brokerId);
+      // For now, just update local state
+      const updated = connectedBrokers.filter(b => b.id !== brokerId);
+      setConnectedBrokers(updated);
       
-      if (result.success) {
-        const connections = brokerIntegration.getConnectedBrokers();
-        setConnectedBrokers(connections);
-        
-        // Remove holdings from this broker
-        const updatedHoldings = holdings.filter(h => h.brokerId !== brokerId);
-        setHoldings(updatedHoldings);
-        
-        return { success: true, message: result.message };
-      } else {
-        throw new Error(result.message || 'Disconnection failed');
-      }
+      return { success: true, message: 'Broker disconnected' };
     } catch (err) {
       setError(err.message);
       return { success: false, error: err.message };
@@ -96,30 +93,18 @@ export const BrokerProvider = ({ children }) => {
     setLoading(true);
     
     try {
-      const result = await brokerIntegration.getHoldings(brokerId);
+      // Get portfolio data
+      const result = await api.portfolio.getAnalytics();
       
-      if (result.success) {
-        // Update holdings state
-        const brokerHoldings = result.holdings.map(h => ({
-          ...h,
-          brokerId,
-          lastSynced: new Date().toISOString()
-        }));
+      if (result.success && result.portfolio) {
+        // Filter holdings by broker if needed
+        const brokerHoldings = (result.portfolio.holdings || []).filter(h => h.brokerId === brokerId);
+        setHoldings(brokerHoldings);
         
-        // Update holdings
-        const otherHoldings = holdings.filter(h => h.brokerId !== brokerId);
-        const updatedHoldings = [...otherHoldings, ...brokerHoldings];
-        
-        setHoldings(updatedHoldings);
-        
-        // Update portfolio in storage
-        const portfolio = storageService.portfolio.get();
-        portfolio.holdings = updatedHoldings;
-        storageService.portfolio.save(portfolio);
-        
-        return { success: true, holdings: updatedHoldings };
+        return { success: true, holdings: brokerHoldings };
       } else {
-        throw new Error('Failed to sync holdings');
+        setHoldings([]);
+        return { success: false, error: 'No holdings found' };
       }
     } catch (err) {
       setError(err.message);
@@ -133,33 +118,15 @@ export const BrokerProvider = ({ children }) => {
     setLoading(true);
     
     try {
-      const syncPromises = connectedBrokers.map(conn => 
-        brokerIntegration.getHoldings(conn.brokerId)
-      );
+      const result = await api.portfolio.getAnalytics();
       
-      const results = await Promise.all(syncPromises);
-      
-      let allHoldings = [];
-      results.forEach((result, index) => {
-        if (result.success) {
-          const brokerId = connectedBrokers[index].brokerId;
-          const brokerHoldings = result.holdings.map(h => ({
-            ...h,
-            brokerId,
-            lastSynced: new Date().toISOString()
-          }));
-          allHoldings = [...allHoldings, ...brokerHoldings];
-        }
-      });
-      
-      setHoldings(allHoldings);
-      
-      // Update portfolio in storage
-      const portfolio = storageService.portfolio.get();
-      portfolio.holdings = allHoldings;
-      storageService.portfolio.save(portfolio);
-      
-      return { success: true, holdings: allHoldings };
+      if (result.success && result.portfolio) {
+        setHoldings(result.portfolio.holdings || []);
+        return { success: true, holdings: result.portfolio.holdings || [] };
+      } else {
+        setHoldings([]);
+        return { success: false, error: 'No holdings found' };
+      }
     } catch (err) {
       setError(err.message);
       return { success: false, error: err.message };
@@ -168,37 +135,17 @@ export const BrokerProvider = ({ children }) => {
     }
   };
 
-  const placeOrder = async (brokerId, orderData) => {
+  const placeOrder = async (orderData) => {
     setLoading(true);
     
     try {
-      const result = await brokerIntegration.placeOrder(brokerId, orderData);
+      const result = await api.broker.placeOrder(orderData);
       
       if (result.success) {
-        // Update holdings if needed
-        if (orderData.action === 'BUY') {
-          const newHolding = {
-            id: result.orderId,
-            symbol: orderData.symbol,
-            quantity: orderData.quantity,
-            averagePrice: orderData.price,
-            currentPrice: orderData.price,
-            brokerId,
-            tradeType: orderData.type || 'INTRADAY'
-          };
-          
-          const updatedHoldings = [...holdings, newHolding];
-          setHoldings(updatedHoldings);
-          
-          // Update portfolio
-          const portfolio = storageService.portfolio.get();
-          portfolio.holdings = updatedHoldings;
-          storageService.portfolio.save(portfolio);
-        }
-        
         return { success: true, order: result };
       } else {
-        throw new Error(result.message || 'Order placement failed');
+        setError(result.message);
+        return { success: false, error: result.message };
       }
     } catch (err) {
       setError(err.message);
@@ -209,7 +156,7 @@ export const BrokerProvider = ({ children }) => {
   };
 
   const getBrokerStatus = (brokerId) => {
-    return connectedBrokers.some(conn => conn.brokerId === brokerId);
+    return connectedBrokers.some(conn => conn.id === brokerId);
   };
 
   const value = {
