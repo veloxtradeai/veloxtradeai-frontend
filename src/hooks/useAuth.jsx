@@ -1,6 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react';
-import authService from '../services/authService';
-import storageService from '../services/storageService';
+import api from '../services/api';
 
 const AuthContext = createContext();
 
@@ -17,11 +16,11 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Load user from localStorage on mount
+  // Load user from token on mount
   useEffect(() => {
-    const loadUser = () => {
+    const loadUser = async () => {
       try {
-        const currentUser = authService.getCurrentUser();
+        const currentUser = await api.auth.getCurrentUser();
         if (currentUser) {
           setUser(currentUser);
         }
@@ -40,14 +39,14 @@ export const AuthProvider = ({ children }) => {
     setError(null);
 
     try {
-      const result = await authService.login(email, password);
+      const result = await api.auth.login(email, password);
       
       if (result.success) {
         setUser(result.user);
         return { success: true, user: result.user };
       } else {
-        setError(result.error);
-        return { success: false, error: result.error };
+        setError(result.message);
+        return { success: false, error: result.message };
       }
     } catch (err) {
       const errorMsg = err.message || 'Login failed';
@@ -63,14 +62,14 @@ export const AuthProvider = ({ children }) => {
     setError(null);
 
     try {
-      const result = await authService.register(userData);
+      const result = await api.auth.register(userData);
       
       if (result.success) {
         setUser(result.user);
         return { success: true, user: result.user };
       } else {
-        setError(result.error);
-        return { success: false, error: result.error };
+        setError(result.message);
+        return { success: false, error: result.message };
       }
     } catch (err) {
       const errorMsg = err.message || 'Registration failed';
@@ -82,27 +81,24 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = () => {
-    authService.logout();
+    api.auth.logout();
     setUser(null);
     setError(null);
-    
-    // Redirect to login page
-    window.location.href = '/login';
   };
 
   const updateProfile = async (userData) => {
     setLoading(true);
     
     try {
-      const result = await authService.updateProfile(userData);
+      // Note: API में updateProfile method नहीं है, लेकिन आपको बैकेंड में implement करना होगा
+      // Temporary: Update local user state
+      const updatedUser = { ...user, ...userData };
+      setUser(updatedUser);
       
-      if (result.success) {
-        setUser(result.user);
-        return { success: true, user: result.user };
-      } else {
-        setError(result.error);
-        return { success: false, error: result.error };
-      }
+      // Save to localStorage
+      localStorage.setItem('velox_user', JSON.stringify(updatedUser));
+      
+      return { success: true, user: updatedUser };
     } catch (err) {
       const errorMsg = err.message || 'Profile update failed';
       setError(errorMsg);
@@ -115,15 +111,15 @@ export const AuthProvider = ({ children }) => {
   const checkSubscription = () => {
     if (!user) return false;
     
-    if (user.subscriptionStatus === 'trial') {
-      const createdAt = new Date(user.createdAt);
+    if (user.subscription === 'trial') {
+      const createdAt = new Date(user.createdAt || Date.now());
       const now = new Date();
       const daysDiff = Math.floor((now - createdAt) / (1000 * 60 * 60 * 24));
       
       return daysDiff <= (user.trialDays || 7);
     }
     
-    return user.subscriptionStatus === 'active' || user.isPremium;
+    return user.subscription === 'active' || user.subscription === 'pro' || user.isPremium;
   };
 
   const value = {
@@ -140,7 +136,7 @@ export const AuthProvider = ({ children }) => {
     // Helpers
     isAuthenticated: !!user,
     hasValidSubscription: checkSubscription(),
-    isTrialActive: user?.subscriptionStatus === 'trial'
+    isTrialActive: user?.subscription === 'trial'
   };
 
   return (
