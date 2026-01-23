@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { tradingAPI, portfolioAPI } from '../services/api';
+import { tradingAPI, portfolioAPI, marketAPI } from '../services/api';
 
 const StocksContext = createContext();
 
@@ -23,7 +23,6 @@ export const StocksProvider = ({ children }) => {
     nextClose: '3:30 PM'
   });
 
-  // SAFE number formatter
   const safeToFixed = (value, decimals = 2) => {
     if (value === undefined || value === null || isNaN(Number(value))) {
       return '0.00';
@@ -31,22 +30,16 @@ export const StocksProvider = ({ children }) => {
     return Number(value).toFixed(decimals);
   };
 
-  // ✅ REAL API CALLS - NO MOCK DATA
   const loadStocks = async () => {
     setLoading(true);
     setError(null);
 
     try {
-      console.log('🔄 असली स्टॉक्स लोड हो रहे हैं...');
-      
-      // 1. AI स्टॉक सिफ़ारिशें लो
       const response = await tradingAPI.getAIScreener();
       
       if (response && response.success && response.recommendations) {
-        console.log(`✅ ${response.recommendations.length} स्टॉक्स मिले`);
         setStocks(response.recommendations);
         
-        // रियल-टाइम डेटा इनिशियलाइज़ करो
         const initialRealTimeData = {};
         response.recommendations.forEach(stock => {
           if (stock && stock.symbol) {
@@ -59,14 +52,12 @@ export const StocksProvider = ({ children }) => {
         });
         setRealTimeData(initialRealTimeData);
       } else {
-        // अगर कोई डेटा नहीं मिला, empty array set करो
-        console.log('⚠️ कोई स्टॉक्स नहीं मिले, खाली array सेट कर रहा हूँ');
         setStocks([]);
         setRealTimeData({});
       }
     } catch (err) {
-      console.error('❌ स्टॉक्स लोड करने में एरर:', err);
-      setError('बैकेंड से कनेक्ट नहीं हो पा रहा');
+      console.error('Stocks loading error:', err);
+      setError('Failed to load stocks from backend');
       setStocks([]);
       setRealTimeData({});
     } finally {
@@ -74,7 +65,6 @@ export const StocksProvider = ({ children }) => {
     }
   };
 
-  // ✅ पोर्टफोलियो लोड करो
   const loadPortfolio = async () => {
     try {
       const response = await portfolioAPI.getAnalytics();
@@ -84,12 +74,11 @@ export const StocksProvider = ({ children }) => {
         setPortfolio([]);
       }
     } catch (error) {
-      console.error('पोर्टफोलियो एरर:', error);
+      console.error('Portfolio error:', error);
       setPortfolio([]);
     }
   };
 
-  // ✅ मार्केट स्टेटस चेक करो
   const checkMarketStatus = useCallback(() => {
     const now = new Date();
     const hour = now.getHours();
@@ -105,7 +94,6 @@ export const StocksProvider = ({ children }) => {
     });
   }, []);
 
-  // ✅ पोर्टफोलियो स्टैट्स कैलकुलेट करो
   const calculatePortfolioStats = useCallback(() => {
     try {
       const calculatePortfolioValue = () => {
@@ -147,7 +135,6 @@ export const StocksProvider = ({ children }) => {
       const returns = currentValue - investment;
       const returnsPercent = investment > 0 ? (returns / investment) * 100 : 0;
 
-      // कुल ट्रेड्स और विन रेट कैलकुलेट करो (backend से आएगा)
       const totalTrades = portfolio.length;
       const winningTrades = portfolio.filter(h => (h.pnl || 0) > 0).length;
       const winRate = totalTrades > 0 ? (winningTrades / totalTrades) * 100 : 0;
@@ -159,11 +146,13 @@ export const StocksProvider = ({ children }) => {
         returnsPercent: parseFloat(safeToFixed(returnsPercent, 2)),
         dailyPnL: parseFloat(safeToFixed(dailyPnL, 0)),
         holdingsCount: Array.isArray(portfolio) ? portfolio.length : 0,
-        activeTrades: Array.isArray(portfolio) ? portfolio.filter(h => h?.status === 'ACTIVE' || h?.status === 'open').length : 0,
+        activeTrades: Array.isArray(portfolio) ? portfolio.filter(h => 
+          h?.status === 'ACTIVE' || h?.status === 'open'
+        ).length : 0,
         winRate: `${safeToFixed(winRate, 1)}%`
       };
     } catch (error) {
-      console.error('पोर्टफोलियो स्टैट्स एरर:', error);
+      console.error('Portfolio stats error:', error);
       return {
         currentValue: 0,
         investedValue: 0,
@@ -177,13 +166,11 @@ export const StocksProvider = ({ children }) => {
     }
   }, [portfolio, realTimeData]);
 
-  // 🔄 इनिशियल डेटा लोड करो
   useEffect(() => {
     loadStocks();
     loadPortfolio();
     checkMarketStatus();
     
-    // हर 30 सेकंड में मार्केट स्टेटस चेक करो
     const interval = setInterval(() => {
       checkMarketStatus();
     }, 30000);
@@ -191,13 +178,11 @@ export const StocksProvider = ({ children }) => {
     return () => clearInterval(interval);
   }, [checkMarketStatus]);
 
-  // 🔄 स्टॉक्स रिफ़्रेश करो
   const refreshStocks = async () => {
     await loadStocks();
     await loadPortfolio();
   };
 
-  // 📈 टॉप मूवर्स कैलकुलेट करो
   const getTopMovers = () => {
     if (!stocks || !Array.isArray(stocks) || stocks.length === 0) {
       return { gainers: [], losers: [] };
@@ -217,7 +202,6 @@ export const StocksProvider = ({ children }) => {
   };
 
   const value = {
-    // डेटा
     stocks: stocks || [],
     portfolio: portfolio || [],
     realTimeData: realTimeData || {},
@@ -225,10 +209,8 @@ export const StocksProvider = ({ children }) => {
     error,
     marketStatus,
     
-    // पोर्टफोलियो स्टैट्स
     portfolioStats: calculatePortfolioStats(),
     
-    // मेथड्स
     refreshStocks,
     getStockDetails: async (symbol) => {
       const stock = stocks.find(s => s.symbol === symbol);
@@ -238,10 +220,8 @@ export const StocksProvider = ({ children }) => {
       return realTimeData[symbol]?.price || 0;
     },
     
-    // टॉप मूवर्स
     getTopMovers,
     
-    // सुरक्षित फॉर्मेटर
     safeToFixed
   };
 
