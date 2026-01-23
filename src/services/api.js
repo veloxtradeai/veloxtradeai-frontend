@@ -1,32 +1,29 @@
 // ============================================
 // VELOXTRADEAI - REAL API SERVICE
-// NO MOCK DATA - REAL BACKEND CONNECTION ONLY
+// NO MOCK DATA - ONLY REAL BACKEND
 // ============================================
 
-// ✅ असली बैकेंड URL (environment variable से)
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
-// 🔴 मोक डेटा बिल्कुल बंद - कोई चेक नहीं
-const FORCE_REAL_DATA_ONLY = true;
-
-// 🔐 ऑथ टोकन सिस्टम
+// Token management
 const getToken = () => localStorage.getItem('velox_auth_token');
-const setToken = (token) => {
-  localStorage.setItem('velox_auth_token', token);
-  console.log('टोकन सेव हुआ');
-};
-const removeToken = () => {
-  localStorage.removeItem('velox_auth_token');
-  console.log('टोकन हटा दिया गया');
+const setToken = (token) => localStorage.setItem('velox_auth_token', token);
+const removeToken = () => localStorage.removeItem('velox_auth_token');
+
+// Safe number formatting
+const safeToFixed = (value, decimals = 2) => {
+  if (value === undefined || value === null || isNaN(Number(value))) {
+    return '0.00';
+  }
+  return Number(value).toFixed(decimals);
 };
 
-// 📡 API रिक्वेस्ट हेल्पर (रियल डेटा के लिए)
+// API Request helper
 const apiRequest = async (endpoint, method = 'GET', data = null, useAuth = true) => {
   const headers = {
     'Content-Type': 'application/json',
   };
 
-  // ऑथ टोकन अटैच करो
   if (useAuth) {
     const token = getToken();
     if (token) {
@@ -46,22 +43,14 @@ const apiRequest = async (endpoint, method = 'GET', data = null, useAuth = true)
   }
 
   try {
-    console.log(`📡 API कॉल: ${API_BASE_URL}${endpoint}`);
-    
     const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
     
-    // 401 अनऑथोराइज्ड - लॉगिन पेज भेजो
     if (response.status === 401) {
       removeToken();
       window.location.href = '/login';
-      return {
-        success: false,
-        message: 'सेशन खत्म हुआ है। कृपया दोबारा लॉगिन करें।',
-        data: null
-      };
+      return { success: false, message: 'Session expired' };
     }
 
-    // रिस्पॉन्स चेक करो
     const contentType = response.headers.get('content-type');
     let result;
     
@@ -72,17 +61,16 @@ const apiRequest = async (endpoint, method = 'GET', data = null, useAuth = true)
       result = { success: false, message: text };
     }
     
-    // एरर हैंडलिंग
     if (!response.ok) {
-      throw new Error(result.message || `API में समस्या (status: ${response.status})`);
+      throw new Error(result.message || `API error: ${response.status}`);
     }
 
     return result;
   } catch (error) {
-    console.error('❌ API एरर:', error);
+    console.error('API Error:', error);
     return {
       success: false,
-      message: 'बैकेंड कनेक्शन फेल हुआ। कृपया बाद में कोशिश करें।',
+      message: 'Backend connection failed',
       data: null,
       error: error.message
     };
@@ -90,7 +78,7 @@ const apiRequest = async (endpoint, method = 'GET', data = null, useAuth = true)
 };
 
 // ======================
-// ऑथेंटिकेशन APIs
+// AUTHENTICATION APIs
 // ======================
 export const authAPI = {
   register: async (userData) => {
@@ -116,9 +104,7 @@ export const authAPI = {
 
   getCurrentUser: async () => {
     const token = getToken();
-    if (!token) {
-      return null;
-    }
+    if (!token) return null;
     
     const result = await apiRequest('/api/auth/me');
     if (result && result.success) {
@@ -129,7 +115,7 @@ export const authAPI = {
 };
 
 // ======================
-// मार्केट डेटा APIs
+// MARKET DATA APIs
 // ======================
 export const marketAPI = {
   getLiveData: async (symbols = 'RELIANCE,TCS,HDFCBANK,INFY,ICICIBANK') => {
@@ -142,69 +128,59 @@ export const marketAPI = {
 };
 
 // ======================
-// AI ट्रेडिंग APIs
+// AI TRADING APIs
 // ======================
 export const tradingAPI = {
-  // AI स्टॉक स्क्रीनर
   getAIScreener: async (filters = {}) => {
     return await apiRequest('/api/ai/screener', 'POST', { filters });
   },
 
-  // ट्रेडिंग सिग्नल लाओ
   getSignals: async () => {
     return await apiRequest('/api/ai/signal');
   },
 
-  // लेवल कैलकुलेट करो
   calculateLevels: async (symbol) => {
     return await apiRequest('/api/ai/levels', 'POST', { symbol });
   },
 
-  // रियल-टाइम सिग्नल जनरेट करो
   generateSignal: async (stockData) => {
     return await apiRequest('/api/ai/generate-signal', 'POST', stockData);
   },
 };
 
 // ======================
-// ब्रोकर APIs
+// BROKER APIs
 // ======================
 export const brokerAPI = {
-  // ब्रोकर कनेक्ट करो
   connectBroker: async (brokerData) => {
     return await apiRequest('/api/broker/connect', 'POST', brokerData);
   },
 
-  // कनेक्टेड ब्रोकर लाओ
   getBrokers: async () => {
     const token = getToken();
     if (!token) return { success: false, brokers: [] };
     
     try {
-      // टोकन से user_id निकालो
       const payload = JSON.parse(atob(token.split('.')[1]));
       return await apiRequest(`/api/broker/data?user_id=${payload.user_id || payload.id}`);
     } catch {
-      return { success: false, brokers: [] };
+      return await apiRequest('/api/broker/data');
     }
   },
 
-  // ऑर्डर प्लेस करो
   placeOrder: async (orderData) => {
     return await apiRequest('/api/broker/place-order', 'POST', orderData);
   },
 
-  // कनेक्शन टेस्ट करो
   testConnection: async (brokerId) => {
     return await apiRequest(`/api/broker/test/${brokerId}`);
   },
 };
 
 // ======================
-// ट्रेड मैनेजमेंट APIs
+// TRADE MANAGEMENT APIs
 // ======================
 export const tradeAPI = {
-  // सारे ट्रेड लाओ
   getTrades: async () => {
     const token = getToken();
     if (!token) return { success: false, trades: [] };
@@ -213,21 +189,18 @@ export const tradeAPI = {
       const payload = JSON.parse(atob(token.split('.')[1]));
       return await apiRequest(`/api/trades?user_id=${payload.user_id || payload.id}`);
     } catch {
-      return { success: false, trades: [] };
+      return await apiRequest('/api/trades');
     }
   },
 
-  // नया ट्रेड जोड़ो
   addTrade: async (tradeData) => {
     return await apiRequest('/api/trades', 'POST', tradeData);
   },
 
-  // ट्रेड अपडेट करो
   updateTrade: async (tradeId, updates) => {
     return await apiRequest(`/api/trades/${tradeId}`, 'PUT', updates);
   },
 
-  // ऑटो SL/TGT एडजस्ट करो
   autoAdjust: async (tradeId, currentPrice) => {
     return await apiRequest('/api/trades/auto-adjust', 'POST', { 
       trade_id: tradeId, 
@@ -235,14 +208,13 @@ export const tradeAPI = {
     });
   },
 
-  // ट्रेड क्लोज करो
   closeTrade: async (tradeId) => {
     return await apiRequest(`/api/trades/${tradeId}/close`, 'POST');
   },
 };
 
 // ======================
-// पोर्टफोलियो APIs
+// PORTFOLIO APIs
 // ======================
 export const portfolioAPI = {
   getAnalytics: async () => {
@@ -253,7 +225,7 @@ export const portfolioAPI = {
       const payload = JSON.parse(atob(token.split('.')[1]));
       return await apiRequest(`/api/analytics/portfolio?user_id=${payload.user_id || payload.id}`);
     } catch {
-      return { success: false, portfolio: null };
+      return await apiRequest('/api/analytics/portfolio');
     }
   },
 
@@ -265,33 +237,65 @@ export const portfolioAPI = {
       const payload = JSON.parse(atob(token.split('.')[1]));
       return await apiRequest(`/api/analytics/performance?user_id=${payload.user_id || payload.id}&period=${period}`);
     } catch {
-      return { success: false, performance: null };
+      return await apiRequest(`/api/analytics/performance?period=${period}`);
     }
   },
 
   getRiskMetrics: async () => {
-    const token = getToken();
-    if (!token) return { success: false, riskMetrics: null };
-    
-    try {
-      const payload = JSON.parse(atob(token.split('.')[1]));
-      return await apiRequest(`/api/analytics/risk-metrics?user_id=${payload.user_id || payload.id}`);
-    } catch {
-      return { success: false, riskMetrics: null };
-    }
+    return await apiRequest('/api/analytics/risk-metrics');
   },
 };
 
 // ======================
-// रियल-टाइम वेबसॉकेट
+// LANGUAGE MANAGEMENT
+// ======================
+export const languageAPI = {
+  setLanguage: (lang) => {
+    localStorage.setItem('velox_language', lang);
+    window.location.reload();
+  },
+
+  getLanguage: () => {
+    return localStorage.getItem('velox_language') || 'en';
+  },
+
+  getTranslations: async (lang = 'en') => {
+    const translations = {
+      en: {
+        dashboard: 'Dashboard',
+        portfolioValue: 'Portfolio Value',
+        dailyPnL: 'Daily P&L',
+        winRate: 'Win Rate',
+        activeTrades: 'Active Trades',
+        marketOpen: 'Market Open',
+        marketClosed: 'Market Closed'
+      },
+      hi: {
+        dashboard: 'डैशबोर्ड',
+        portfolioValue: 'पोर्टफोलियो वैल्यू',
+        dailyPnL: 'दैनिक P&L',
+        winRate: 'विन रेट',
+        activeTrades: 'एक्टिव ट्रेड्स',
+        marketOpen: 'बाज़ार खुला',
+        marketClosed: 'बाज़ार बंद'
+      }
+    };
+    
+    return translations[lang] || translations.en;
+  }
+};
+
+// ======================
+// REAL-TIME WebSocket
 // ======================
 export const setupWebSocket = (onMessage) => {
   try {
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(`${wsProtocol}//veloxtradeai-api.velox-trade-ai.workers.dev/ws`);
+    const wsUrl = `${wsProtocol}//${API_BASE_URL.replace(/^https?:\/\//, '')}/ws`;
+    const ws = new WebSocket(wsUrl);
     
     ws.onopen = () => {
-      console.log('✅ वेबसॉकेट कनेक्टेड');
+      console.log('✅ WebSocket connected');
       const token = getToken();
       if (token) {
         ws.send(JSON.stringify({ type: 'auth', token }));
@@ -303,28 +307,28 @@ export const setupWebSocket = (onMessage) => {
         const data = JSON.parse(event.data);
         onMessage(data);
       } catch (error) {
-        console.error('वेबसॉकेट मैसेज एरर:', error);
+        console.error('WebSocket message error:', error);
       }
     };
 
     ws.onerror = (error) => {
-      console.error('❌ वेबसॉकेट एरर:', error);
+      console.error('❌ WebSocket error:', error);
     };
 
     ws.onclose = () => {
-      console.log('🔌 वेबसॉकेट डिस्कनेक्टेड - 5 सेकंड में रीकनेक्ट');
+      console.log('🔌 WebSocket disconnected - reconnecting in 5s');
       setTimeout(() => setupWebSocket(onMessage), 5000);
     };
 
     return () => ws.close();
   } catch (error) {
-    console.error('वेबसॉकेट सेटअप फेल:', error);
+    console.error('WebSocket setup failed:', error);
     return () => {};
   }
 };
 
 // ======================
-// सारे APIs एक्सपोर्ट
+// EXPORT ALL APIs
 // ======================
 export default {
   auth: authAPI,
@@ -333,8 +337,10 @@ export default {
   broker: brokerAPI,
   trade: tradeAPI,
   portfolio: portfolioAPI,
+  language: languageAPI,
   setupWebSocket,
-  // यह फंक्शन बताएगा कि बैकेंड कनेक्टेड है या नहीं
+  safeToFixed,
+  
   checkBackendStatus: async () => {
     try {
       const response = await fetch(API_BASE_URL + '/health');
