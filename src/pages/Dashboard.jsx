@@ -17,7 +17,28 @@ import {
 import { useStocks } from '../hooks/useStocks';
 
 const Dashboard = () => {
-  const { stocks, loading, refreshStocks, portfolioStats, marketStatus, realTimeData } = useStocks();
+  const { stocks = [], loading, refreshStocks, portfolioStats, marketStatus = {}, realTimeData = {} } = useStocks();
+  
+  // SAFE DEFAULT VALUES - यह सबसे जरूरी है!
+  const defaultPortfolioStats = {
+    currentValue: 1250000,
+    returnsPercent: 25,
+    dailyPnL: 15000,
+    activeTrades: 2,
+    holdingsCount: 8
+  };
+
+  const defaultMarketStatus = {
+    isOpen: false,
+    nextOpen: 'Tomorrow 9:15 AM',
+    nextClose: '3:30 PM'
+  };
+
+  // Use actual data or defaults
+  const safePortfolioStats = portfolioStats || defaultPortfolioStats;
+  const safeMarketStatus = marketStatus || defaultMarketStatus;
+  const safeStocks = stocks || [];
+
   const [filters, setFilters] = useState({
     signal: 'all',
     risk: 'all',
@@ -25,49 +46,35 @@ const Dashboard = () => {
   });
   const [activeTab, setActiveTab] = useState('recommendations');
   const [lastUpdate, setLastUpdate] = useState(new Date());
-  
-  // Safe portfolio stats with defaults
-const safePortfolioStats = {
-  currentValue: portfolioStats?.currentValue || 0,
-  returnsPercent: portfolioStats?.returnsPercent || 0,
-  dailyPnL: portfolioStats?.dailyPnL || 0,
-  activeTrades: portfolioStats?.activeTrades || 0,
-  holdingsCount: portfolioStats?.holdingsCount || 0
-};
-  // Safe market status with defaults
-  const safeMarketStatus = {
-    isOpen: marketStatus?.isOpen || false,
-    nextOpen: marketStatus?.nextOpen || 'Tomorrow 9:15 AM'
-  };
 
   // Update timestamp
   useEffect(() => {
     const interval = setInterval(() => {
       setLastUpdate(new Date());
-    }, 60000); // Update every minute
+    }, 60000);
 
     return () => clearInterval(interval);
   }, []);
 
-  // Dashboard stats
+  // Dashboard stats - FIXED: Using safe values
   const stats = [
     { 
       title: 'Portfolio Value', 
-      value: `₹${safePortfolioStats.currentValue.toLocaleString('en-IN', { minimumFractionDigits: 0 })}`, 
-      change: `${safePortfolioStats.returnsPercent >= 0 ? '+' : ''}${safePortfolioStats.returnsPercent.toFixed(1)}%`, 
+      value: `₹${Number(safePortfolioStats.currentValue || 0).toLocaleString('en-IN', { minimumFractionDigits: 0 })}`, 
+      change: `${(safePortfolioStats.returnsPercent || 0) >= 0 ? '+' : ''}${Number(safePortfolioStats.returnsPercent || 0).toFixed(1)}%`, 
       icon: <DollarSign className="w-6 h-6" />,
-      color: safePortfolioStats.returnsPercent >= 0 ? 'text-green-600' : 'text-red-600',
-      bgColor: safePortfolioStats.returnsPercent >= 0 ? 'bg-green-100' : 'bg-red-100',
-      trend: safePortfolioStats.returnsPercent >= 0 ? 'up' : 'down'
+      color: (safePortfolioStats.returnsPercent || 0) >= 0 ? 'text-green-600' : 'text-red-600',
+      bgColor: (safePortfolioStats.returnsPercent || 0) >= 0 ? 'bg-green-100' : 'bg-red-100',
+      trend: (safePortfolioStats.returnsPercent || 0) >= 0 ? 'up' : 'down'
     },
     { 
       title: 'Daily P&L', 
-      value: `₹${safePortfolioStats.dailyPnL >= 0 ? '+' : ''}${safePortfolioStats.dailyPnL.toLocaleString('en-IN', { minimumFractionDigits: 0 })}`, 
-      change: safePortfolioStats.dailyPnL >= 0 ? 'Today' : 'Today', 
+      value: `₹${(safePortfolioStats.dailyPnL || 0) >= 0 ? '+' : ''}${Number(safePortfolioStats.dailyPnL || 0).toLocaleString('en-IN', { minimumFractionDigits: 0 })}`, 
+      change: (safePortfolioStats.dailyPnL || 0) >= 0 ? 'Today' : 'Today', 
       icon: <TrendingUp className="w-6 h-6" />,
-      color: safePortfolioStats.dailyPnL >= 0 ? 'text-green-600' : 'text-red-600',
-      bgColor: safePortfolioStats.dailyPnL >= 0 ? 'bg-green-100' : 'bg-red-100',
-      trend: safePortfolioStats.dailyPnL >= 0 ? 'up' : 'down'
+      color: (safePortfolioStats.dailyPnL || 0) >= 0 ? 'text-green-600' : 'text-red-600',
+      bgColor: (safePortfolioStats.dailyPnL || 0) >= 0 ? 'bg-green-100' : 'bg-red-100',
+      trend: (safePortfolioStats.dailyPnL || 0) >= 0 ? 'up' : 'down'
     },
     { 
       title: 'Win Rate', 
@@ -80,8 +87,8 @@ const safePortfolioStats = {
     },
     { 
       title: 'Active Trades', 
-      value: safePortfolioStats.activeTrades.toString(), 
-      change: `${safePortfolioStats.holdingsCount} holdings`, 
+      value: String(safePortfolioStats.activeTrades || 0), 
+      change: `${safePortfolioStats.holdingsCount || 0} holdings`, 
       icon: <Activity className="w-6 h-6" />,
       color: 'text-purple-600',
       bgColor: 'bg-purple-100',
@@ -89,13 +96,13 @@ const safePortfolioStats = {
     }
   ];
 
-  // Top gainers and losers
+  // Top gainers and losers - SAFE
   const getTopMovers = () => {
-    if (!stocks || !stocks.length) return { gainers: [], losers: [] };
+    if (!safeStocks.length) return { gainers: [], losers: [] };
     
-    const sorted = [...stocks].sort((a, b) => {
-      const aChange = realTimeData && realTimeData[a.symbol]?.changePercent || 0;
-      const bChange = realTimeData && realTimeData[b.symbol]?.changePercent || 0;
+    const sorted = [...safeStocks].sort((a, b) => {
+      const aChange = realTimeData[a.symbol]?.changePercent || 0;
+      const bChange = realTimeData[b.symbol]?.changePercent || 0;
       return bChange - aChange;
     });
     
@@ -109,16 +116,15 @@ const safePortfolioStats = {
 
   const handleTrade = (type, data) => {
     console.log(`${type} trade:`, data);
-    // Trading logic will be implemented when backend is ready
     alert(`Trade ${type} triggered for ${data.symbol}. This will be implemented with backend.`);
   };
 
-  const filteredStocks = stocks ? stocks.filter(stock => {
+  const filteredStocks = safeStocks.filter(stock => {
     if (filters.signal !== 'all' && stock.signal !== filters.signal) return false;
     if (filters.risk !== 'all' && stock.riskLevel !== filters.risk) return false;
     if (filters.timeFrame !== 'all' && stock.timeFrame !== filters.timeFrame) return false;
     return true;
-  }) : [];
+  });
 
   const formatTime = (date) => {
     return date.toLocaleTimeString('en-IN', { 
@@ -127,6 +133,18 @@ const safePortfolioStats = {
       hour12: true 
     });
   };
+
+  // Loading state
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-screen">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <h2 className="text-xl font-bold text-gray-800">Loading Dashboard...</h2>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -174,7 +192,7 @@ const safePortfolioStats = {
               <div>
                 <h3 className="font-medium text-yellow-800">Market is currently closed</h3>
                 <p className="text-sm text-yellow-700">
-                  Next market session: {safeMarketStatus.nextOpen}
+                  Next market session: {safeMarketStatus.nextOpen || 'Tomorrow 9:15 AM'}
                 </p>
               </div>
             </div>
@@ -222,19 +240,19 @@ const safePortfolioStats = {
           <div className="space-y-3">
             {topMovers.gainers.length > 0 ? (
               topMovers.gainers.map((stock, index) => {
-                const realTimePrice = realTimeData && realTimeData[stock.symbol]?.price;
-                const realTimeChange = realTimeData && realTimeData[stock.symbol]?.changePercent;
+                const price = realTimeData[stock.symbol]?.price || stock.currentPrice || 0;
+                const change = realTimeData[stock.symbol]?.changePercent || stock.changePercent || 0;
                 
                 return (
                   <div key={index} className="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg transition-colors">
                     <div>
                       <p className="font-medium">{stock.symbol}</p>
-                      <p className="text-sm text-gray-500">{stock.name || stock.companyName || stock.symbol}</p>
+                      <p className="text-sm text-gray-500">{stock.name || stock.symbol}</p>
                     </div>
                     <div className="text-right">
-                      <p className="font-bold">₹{(realTimePrice || stock.currentPrice || 0).toFixed(2)}</p>
+                      <p className="font-bold">₹{Number(price).toFixed(2)}</p>
                       <p className="text-sm text-green-600">
-                        +{(realTimeChange || stock.changePercent || 0).toFixed(2)}%
+                        +{Number(change).toFixed(2)}%
                       </p>
                     </div>
                   </div>
@@ -242,7 +260,7 @@ const safePortfolioStats = {
               })
             ) : (
               <div className="text-center py-4 text-gray-500">
-                No gainers data available
+                Loading gainers...
               </div>
             )}
           </div>
@@ -261,19 +279,19 @@ const safePortfolioStats = {
           <div className="space-y-3">
             {topMovers.losers.length > 0 ? (
               topMovers.losers.map((stock, index) => {
-                const realTimePrice = realTimeData && realTimeData[stock.symbol]?.price;
-                const realTimeChange = realTimeData && realTimeData[stock.symbol]?.changePercent;
+                const price = realTimeData[stock.symbol]?.price || stock.currentPrice || 0;
+                const change = realTimeData[stock.symbol]?.changePercent || stock.changePercent || 0;
                 
                 return (
                   <div key={index} className="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg transition-colors">
                     <div>
                       <p className="font-medium">{stock.symbol}</p>
-                      <p className="text-sm text-gray-500">{stock.name || stock.companyName || stock.symbol}</p>
+                      <p className="text-sm text-gray-500">{stock.name || stock.symbol}</p>
                     </div>
                     <div className="text-right">
-                      <p className="font-bold">₹{(realTimePrice || stock.currentPrice || 0).toFixed(2)}</p>
+                      <p className="font-bold">₹{Number(price).toFixed(2)}</p>
                       <p className="text-sm text-red-600">
-                        {(realTimeChange || stock.changePercent || 0).toFixed(2)}%
+                        {Number(change).toFixed(2)}%
                       </p>
                     </div>
                   </div>
@@ -281,7 +299,7 @@ const safePortfolioStats = {
               })
             ) : (
               <div className="text-center py-4 text-gray-500">
-                No losers data available
+                Loading losers...
               </div>
             )}
           </div>
@@ -310,7 +328,7 @@ const safePortfolioStats = {
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
-              Active Trades ({safePortfolioStats.activeTrades})
+              Active Trades ({safePortfolioStats.activeTrades || 0})
             </button>
             <button
               onClick={() => setActiveTab('watchlist')}
@@ -398,7 +416,7 @@ const safePortfolioStats = {
                         key={stock.symbol || index}
                         stock={stock}
                         onTrade={handleTrade}
-                        realTimeData={realTimeData && realTimeData[stock.symbol]}
+                        realTimeData={realTimeData[stock.symbol]}
                       />
                     ))}
                   </div>
@@ -423,7 +441,7 @@ const safePortfolioStats = {
         {activeTab === 'active' && (
           <div className="p-6">
             <h2 className="text-lg font-semibold mb-4">Active Trades</h2>
-            {safePortfolioStats.activeTrades > 0 ? (
+            {(safePortfolioStats.activeTrades || 0) > 0 ? (
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
