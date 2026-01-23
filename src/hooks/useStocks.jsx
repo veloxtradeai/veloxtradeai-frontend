@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import api from '../services/api'; // Import the API
+import api from '../services/api';
 
 const StocksContext = createContext();
 
@@ -31,27 +31,17 @@ export const StocksProvider = ({ children }) => {
     loadWatchlist();
     checkMarketStatus();
     
-    // Setup WebSocket for real-time updates
-    const cleanup = api.setupWebSocket((data) => {
-      if (data.type === 'price_update' && data.symbol) {
-        setRealTimeData(prev => ({
-          ...prev,
-          [data.symbol]: {
-            ...prev[data.symbol],
-            price: data.price,
-            changePercent: data.changePercent,
-            lastUpdated: data.timestamp
-          }
-        }));
+    // Setup real-time updates
+    const interval = setInterval(() => {
+      if (marketStatus.isOpen) {
+        updateRealTimePrices();
       }
-    });
+    }, 30000); // Every 30 seconds
 
-    return () => {
-      if (cleanup) cleanup();
-    };
+    return () => clearInterval(interval);
   }, []);
 
-  const checkMarketStatus = () => {
+  const checkMarketStatus = useCallback(() => {
     const now = new Date();
     const hour = now.getHours();
     const day = now.getDay();
@@ -60,19 +50,21 @@ export const StocksProvider = ({ children }) => {
     const isWeekday = day >= 1 && day <= 5;
     const isMarketHour = (hour >= 9 && hour < 15) || (hour === 15 && now.getMinutes() < 30);
     
-    setMarketStatus({
+    const newStatus = {
       isOpen: isWeekday && isMarketHour,
       nextOpen: !isWeekday ? 'Monday 9:15 AM' : 'Tomorrow 9:15 AM',
       nextClose: '3:30 PM'
-    });
-  };
+    };
+    
+    setMarketStatus(newStatus);
+    return newStatus;
+  }, []);
 
   const loadStocks = async () => {
     setLoading(true);
     setError(null);
 
     try {
-      // Use the API from api.js
       const result = await api.trading.getAIScreener();
       
       if (result.success && result.recommendations) {
@@ -83,7 +75,8 @@ export const StocksProvider = ({ children }) => {
           signal: stock.signal || 'neutral',
           confidence: stock.confidence || 75,
           riskLevel: stock.riskLevel || 'medium',
-          timeFrame: stock.timeFrame || 'swing'
+          timeFrame: stock.timeFrame || 'swing',
+          name: stock.name || stock.symbol
         }));
         
         setStocks(stocksData);
@@ -99,9 +92,33 @@ export const StocksProvider = ({ children }) => {
         });
         
         setRealTimeData(initialRealTimeData);
+      } else if (result.success && result.data) {
+        // Alternative API response format
+        const stocksData = result.data.map(stock => ({
+          ...stock,
+          currentPrice: stock.price || stock.currentPrice || 0,
+          changePercent: stock.change || stock.changePercent || 0,
+          signal: stock.signal || 'neutral',
+          confidence: stock.confidence || 75,
+          riskLevel: stock.riskLevel || 'medium',
+          timeFrame: stock.timeFrame || 'swing',
+          name: stock.name || stock.symbol
+        }));
+        
+        setStocks(stocksData);
+        
+        const initialRealTimeData = {};
+        stocksData.forEach(stock => {
+          initialRealTimeData[stock.symbol] = {
+            price: stock.currentPrice,
+            changePercent: stock.changePercent,
+            lastUpdated: new Date().toISOString()
+          };
+        });
+        
+        setRealTimeData(initialRealTimeData);
       } else {
-        // Fallback to mock data structure if API returns different format
-        console.warn('API returned unexpected format, using fallback data');
+        // Fallback to mock data
         const fallbackStocks = [
           { 
             symbol: 'RELIANCE', 
@@ -122,26 +139,6 @@ export const StocksProvider = ({ children }) => {
             riskLevel: 'low',
             timeFrame: 'positional',
             confidence: 78
-          },
-          { 
-            symbol: 'HDFCBANK', 
-            name: 'HDFC Bank Ltd', 
-            currentPrice: 1650.25, 
-            changePercent: -0.5, 
-            signal: 'neutral',
-            riskLevel: 'low',
-            timeFrame: 'intraday',
-            confidence: 65
-          },
-          { 
-            symbol: 'INFY', 
-            name: 'Infosys Ltd', 
-            currentPrice: 1550.80, 
-            changePercent: 3.2, 
-            signal: 'buy',
-            riskLevel: 'medium',
-            timeFrame: 'swing',
-            confidence: 82
           }
         ];
         
@@ -172,26 +169,41 @@ export const StocksProvider = ({ children }) => {
   const loadPortfolio = async () => {
     try {
       // Try to load from API first
-      const result = await api.portfolio.getAnalytics();
+      const result = await api.trade.getTrades();
       
-      if (result.success && result.portfolio) {
-        // If API returns portfolio data, use it
-        const portfolioData = {
-          holdings: result.portfolio.holdings || [],
-          stats: result.portfolio
-        };
+      if (result.success && result.trades) {
+        const activeHoldings = result.trades
+          .filter(trade => trade.status === 'open')
+          .map(trade => ({
+            id: trade.id || `HOLD_${Date.now()}`,
+            symbol: trade.symbol,
+            name: trade.name || trade.symbol,
+            quantity: trade.quantity || 0,
+            averagePrice: trade.entry_price || trade.entryPrice || 0,
+            entryDate: trade.entry_date || new Date().toISOString(),
+            tradeType: trade.tradeType || 'INTRADAY',
+            stopLoss: trade.stop_loss || trade.stopLoss,
+            target: trade.target_price || trade.target,
+            status: 'ACTIVE'
+          }));
         
+        setPortfolio(activeHoldings);
+        
+        // Save to localStorage as backup
+        const portfolioData = {
+          holdings: activeHoldings,
+          lastUpdated: new Date().toISOString()
+        };
         localStorage.setItem('velox_portfolio', JSON.stringify(portfolioData));
-        setPortfolio(portfolioData.holdings || []);
       } else {
         // Fallback to localStorage
-        const portfolioData = JSON.parse(localStorage.getItem('velox_portfolio') || '{"holdings": [], "stats": {}}');
+        const portfolioData = JSON.parse(localStorage.getItem('velox_portfolio') || '{"holdings": []}');
         setPortfolio(portfolioData.holdings || []);
       }
     } catch (error) {
       console.error('Portfolio loading error:', error);
       // Fallback to localStorage
-      const portfolioData = JSON.parse(localStorage.getItem('velox_portfolio') || '{"holdings": [], "stats": {}}');
+      const portfolioData = JSON.parse(localStorage.getItem('velox_portfolio') || '{"holdings": []}');
       setPortfolio(portfolioData.holdings || []);
     }
   };
@@ -266,9 +278,6 @@ export const StocksProvider = ({ children }) => {
       if (result.success && result.data) {
         return result.data;
       }
-      throw new Error('Failed to fetch stock details');
-    } catch (err) {
-      console.error('Failed to get stock details:', err);
       // Return from local data
       const stock = stocks.find(s => s.symbol === symbol);
       return stock || {
@@ -276,6 +285,15 @@ export const StocksProvider = ({ children }) => {
         name: symbol,
         currentPrice: realTimeData[symbol]?.price || 0,
         changePercent: realTimeData[symbol]?.changePercent || 0,
+      };
+    } catch (err) {
+      console.error('Failed to get stock details:', err);
+      const stock = stocks.find(s => s.symbol === symbol);
+      return stock || {
+        symbol,
+        name: symbol,
+        currentPrice: 0,
+        changePercent: 0,
       };
     }
   };
@@ -317,43 +335,54 @@ export const StocksProvider = ({ children }) => {
     return realTimeData[symbol]?.price || 0;
   };
 
-  const calculatePortfolioValue = () => {
+  const calculatePortfolioValue = useCallback(() => {
+    if (!portfolio || !portfolio.length) return 0;
+    
     return portfolio.reduce((total, holding) => {
       const currentPrice = getStockPrice(holding.symbol) || holding.averagePrice || 0;
-      return total + (currentPrice * (holding.quantity || 0));
+      const quantity = holding.quantity || 0;
+      return total + (currentPrice * quantity);
     }, 0);
-  };
+  }, [portfolio, realTimeData]);
 
-  const calculateDailyPnL = () => {
+  const calculateDailyPnL = useCallback(() => {
+    if (!portfolio || !portfolio.length) return 0;
+    
     let totalPnL = 0;
     
     portfolio.forEach(holding => {
       const currentPrice = getStockPrice(holding.symbol) || holding.averagePrice || 0;
-      const pnl = (currentPrice - (holding.averagePrice || 0)) * (holding.quantity || 0);
+      const averagePrice = holding.averagePrice || 0;
+      const quantity = holding.quantity || 0;
+      const pnl = (currentPrice - averagePrice) * quantity;
       totalPnL += pnl;
     });
     
     return totalPnL;
-  };
+  }, [portfolio, realTimeData]);
 
-  const calculateTotalInvestment = () => {
+  const calculateTotalInvestment = useCallback(() => {
+    if (!portfolio || !portfolio.length) return 0;
+    
     return portfolio.reduce((total, holding) => {
-      return total + ((holding.averagePrice || 0) * (holding.quantity || 0));
+      const averagePrice = holding.averagePrice || 0;
+      const quantity = holding.quantity || 0;
+      return total + (averagePrice * quantity);
     }, 0);
-  };
+  }, [portfolio]);
 
-  const calculateTotalReturns = () => {
+  const calculateTotalReturns = useCallback(() => {
     const currentValue = calculatePortfolioValue();
     const investment = calculateTotalInvestment();
     return currentValue - investment;
-  };
+  }, [calculatePortfolioValue, calculateTotalInvestment]);
 
-  const calculateReturnsPercentage = () => {
+  const calculateReturnsPercentage = useCallback(() => {
     const investment = calculateTotalInvestment();
     if (investment === 0) return 0;
     const returns = calculateTotalReturns();
     return (returns / investment) * 100;
-  };
+  }, [calculateTotalInvestment, calculateTotalReturns]);
 
   const addToPortfolio = async (tradeData) => {
     try {
@@ -376,8 +405,7 @@ export const StocksProvider = ({ children }) => {
       // Update localStorage
       const portfolioData = {
         holdings: updatedPortfolio,
-        lastUpdated: new Date().toISOString(),
-        totalValue: calculatePortfolioValue()
+        lastUpdated: new Date().toISOString()
       };
       localStorage.setItem('velox_portfolio', JSON.stringify(portfolioData));
       
@@ -388,7 +416,7 @@ export const StocksProvider = ({ children }) => {
           status: 'open'
         });
       } catch (apiError) {
-        console.warn('Failed to save trade to API, using localStorage only:', apiError);
+        console.warn('Failed to save trade to API:', apiError);
       }
       
       return { success: true, holding: newHolding };
@@ -411,8 +439,7 @@ export const StocksProvider = ({ children }) => {
       // Update localStorage
       const portfolioData = {
         holdings: updatedPortfolio,
-        lastUpdated: new Date().toISOString(),
-        totalValue: calculatePortfolioValue()
+        lastUpdated: new Date().toISOString()
       };
       localStorage.setItem('velox_portfolio', JSON.stringify(portfolioData));
       
@@ -444,7 +471,7 @@ export const StocksProvider = ({ children }) => {
     return trades.slice(-limit).reverse();
   };
 
-  const getPortfolioStats = () => {
+  const getPortfolioStats = useCallback(() => {
     const currentValue = calculatePortfolioValue();
     const investment = calculateTotalInvestment();
     const returns = calculateTotalReturns();
@@ -460,7 +487,7 @@ export const StocksProvider = ({ children }) => {
       holdingsCount: portfolio.length,
       activeTrades: portfolio.filter(h => h.status === 'ACTIVE').length
     };
-  };
+  }, [calculatePortfolioValue, calculateTotalInvestment, calculateTotalReturns, calculateReturnsPercentage, calculateDailyPnL, portfolio]);
 
   const value = {
     // Data
@@ -472,7 +499,7 @@ export const StocksProvider = ({ children }) => {
     error,
     marketStatus,
     
-    // Portfolio calculations
+    // Portfolio calculations - FIXED: Now returning proper values
     portfolioValue: calculatePortfolioValue(),
     dailyPnL: calculateDailyPnL(),
     portfolioStats: getPortfolioStats(),
