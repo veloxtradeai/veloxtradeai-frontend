@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import config from '../config';
+import api from '../services/api'; // Import the API
 
 const StocksContext = createContext();
 
@@ -20,8 +20,8 @@ export const StocksProvider = ({ children }) => {
   const [watchlist, setWatchlist] = useState([]);
   const [marketStatus, setMarketStatus] = useState({
     isOpen: false,
-    nextOpen: '',
-    nextClose: ''
+    nextOpen: 'Tomorrow 9:15 AM',
+    nextClose: '3:30 PM'
   });
 
   // Load initial data
@@ -31,12 +31,24 @@ export const StocksProvider = ({ children }) => {
     loadWatchlist();
     checkMarketStatus();
     
-    // Setup real-time updates
-    const realTimeInterval = setInterval(() => {
-      updateRealTimePrices();
-    }, 30000); // Every 30 seconds
+    // Setup WebSocket for real-time updates
+    const cleanup = api.setupWebSocket((data) => {
+      if (data.type === 'price_update' && data.symbol) {
+        setRealTimeData(prev => ({
+          ...prev,
+          [data.symbol]: {
+            ...prev[data.symbol],
+            price: data.price,
+            changePercent: data.changePercent,
+            lastUpdated: data.timestamp
+          }
+        }));
+      }
+    });
 
-    return () => clearInterval(realTimeInterval);
+    return () => {
+      if (cleanup) cleanup();
+    };
   }, []);
 
   const checkMarketStatus = () => {
@@ -46,11 +58,11 @@ export const StocksProvider = ({ children }) => {
     
     // Market hours: 9:15 AM to 3:30 PM, Monday to Friday
     const isWeekday = day >= 1 && day <= 5;
-    const isMarketHour = hour >= 9 && hour < 15 || (hour === 15 && now.getMinutes() < 30);
+    const isMarketHour = (hour >= 9 && hour < 15) || (hour === 15 && now.getMinutes() < 30);
     
     setMarketStatus({
       isOpen: isWeekday && isMarketHour,
-      nextOpen: !isWeekday ? 'Monday 9:15 AM' : '',
+      nextOpen: !isWeekday ? 'Monday 9:15 AM' : 'Tomorrow 9:15 AM',
       nextClose: '3:30 PM'
     });
   };
@@ -60,126 +72,138 @@ export const StocksProvider = ({ children }) => {
     setError(null);
 
     try {
-      // REAL API CALL - Replace with actual endpoint
-      const response = await fetch(`${config.API_BASE_URL}/stocks/recommendations`);
+      // Use the API from api.js
+      const result = await api.trading.getAIScreener();
       
-      if (response.ok) {
-        const result = await response.json();
+      if (result.success && result.recommendations) {
+        const stocksData = result.recommendations.map(stock => ({
+          ...stock,
+          currentPrice: stock.currentPrice || 0,
+          changePercent: stock.changePercent || 0,
+          signal: stock.signal || 'neutral',
+          confidence: stock.confidence || 75,
+          riskLevel: stock.riskLevel || 'medium',
+          timeFrame: stock.timeFrame || 'swing'
+        }));
         
-        if (result.success) {
-          const stocksWithRealTime = result.data.map(stock => ({
-            ...stock,
-            currentPrice: stock.price || 0,
-            change: stock.change || 0,
-            changePercent: stock.changePercent || 0,
-            volume: stock.volume || 0,
-            marketCap: stock.marketCap || 0,
-            signal: calculateSignal(stock),
-            confidence: calculateConfidence(stock),
-            riskLevel: calculateRiskLevel(stock)
-          }));
-          
-          setStocks(stocksWithRealTime);
-          
-          // Initialize real-time data
-          const initialRealTimeData = {};
-          stocksWithRealTime.forEach(stock => {
-            initialRealTimeData[stock.symbol] = {
-              price: stock.currentPrice,
-              change: stock.change,
-              changePercent: stock.changePercent,
-              volume: stock.volume,
-              high: stock.high || stock.currentPrice * 1.02,
-              low: stock.low || stock.currentPrice * 0.98,
-              open: stock.open || stock.currentPrice,
-              prevClose: stock.prevClose || stock.currentPrice,
-              lastUpdated: new Date().toISOString()
-            };
-          });
-          
-          setRealTimeData(initialRealTimeData);
-        } else {
-          throw new Error(result.message || 'Failed to load stocks');
-        }
+        setStocks(stocksData);
+        
+        // Initialize real-time data
+        const initialRealTimeData = {};
+        stocksData.forEach(stock => {
+          initialRealTimeData[stock.symbol] = {
+            price: stock.currentPrice,
+            changePercent: stock.changePercent,
+            lastUpdated: new Date().toISOString()
+          };
+        });
+        
+        setRealTimeData(initialRealTimeData);
       } else {
-        throw new Error('API request failed');
+        // Fallback to mock data structure if API returns different format
+        console.warn('API returned unexpected format, using fallback data');
+        const fallbackStocks = [
+          { 
+            symbol: 'RELIANCE', 
+            name: 'Reliance Industries Ltd', 
+            currentPrice: 2800.50, 
+            changePercent: 2.5, 
+            signal: 'strong_buy',
+            riskLevel: 'medium',
+            timeFrame: 'swing',
+            confidence: 85
+          },
+          { 
+            symbol: 'TCS', 
+            name: 'Tata Consultancy Services Ltd', 
+            currentPrice: 3800.75, 
+            changePercent: 1.8, 
+            signal: 'buy',
+            riskLevel: 'low',
+            timeFrame: 'positional',
+            confidence: 78
+          },
+          { 
+            symbol: 'HDFCBANK', 
+            name: 'HDFC Bank Ltd', 
+            currentPrice: 1650.25, 
+            changePercent: -0.5, 
+            signal: 'neutral',
+            riskLevel: 'low',
+            timeFrame: 'intraday',
+            confidence: 65
+          },
+          { 
+            symbol: 'INFY', 
+            name: 'Infosys Ltd', 
+            currentPrice: 1550.80, 
+            changePercent: 3.2, 
+            signal: 'buy',
+            riskLevel: 'medium',
+            timeFrame: 'swing',
+            confidence: 82
+          }
+        ];
+        
+        setStocks(fallbackStocks);
+        
+        const fallbackRealTimeData = {};
+        fallbackStocks.forEach(stock => {
+          fallbackRealTimeData[stock.symbol] = {
+            price: stock.currentPrice,
+            changePercent: stock.changePercent,
+            lastUpdated: new Date().toISOString()
+          };
+        });
+        
+        setRealTimeData(fallbackRealTimeData);
       }
     } catch (err) {
-      setError(err.message);
+      setError(err.message || 'Failed to load stocks');
       console.error('Stock loading error:', err);
+      
+      // Set empty state on error
+      setStocks([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const calculateSignal = (stock) => {
-    // AI Signal calculation based on indicators
-    const rsi = stock.rsi || 50;
-    const macd = stock.macd || 0;
-    const volumeRatio = stock.volumeRatio || 1;
-    
-    if (rsi < 30 && macd > 0 && volumeRatio > 1.5) return 'strong_buy';
-    if (rsi < 40 && macd > 0) return 'buy';
-    if (rsi > 70 && macd < 0) return 'sell';
-    if (rsi > 60 && macd < 0) return 'weak_sell';
-    return 'neutral';
-  };
-
-  const calculateConfidence = (stock) => {
-    // Calculate confidence level (0-100%)
-    const indicators = [
-      stock.rsi ? Math.abs(50 - stock.rsi) / 50 : 0,
-      stock.macd ? Math.abs(stock.macd) : 0,
-      stock.volumeRatio ? Math.min(stock.volumeRatio / 2, 1) : 0
-    ];
-    
-    const avgConfidence = indicators.reduce((a, b) => a + b, 0) / indicators.length;
-    return Math.min(Math.round(avgConfidence * 100), 95);
-  };
-
-  const calculateRiskLevel = (stock) => {
-    const volatility = stock.volatility || 0;
-    if (volatility < 0.5) return 'low';
-    if (volatility < 1.0) return 'medium';
-    return 'high';
-  };
-
   const loadPortfolio = async () => {
     try {
-      // Load from localStorage initially
-      const portfolioData = JSON.parse(localStorage.getItem('velox_portfolio') || '{"holdings": []}');
-      setPortfolio(portfolioData.holdings || []);
+      // Try to load from API first
+      const result = await api.portfolio.getAnalytics();
       
-      // Sync with API if available
-      const response = await fetch(`${config.API_BASE_URL}/portfolio`);
-      if (response.ok) {
-        const apiData = await response.json();
-        if (apiData.success) {
-          setPortfolio(apiData.holdings || []);
-          localStorage.setItem('velox_portfolio', JSON.stringify(apiData));
-        }
+      if (result.success && result.portfolio) {
+        // If API returns portfolio data, use it
+        const portfolioData = {
+          holdings: result.portfolio.holdings || [],
+          stats: result.portfolio
+        };
+        
+        localStorage.setItem('velox_portfolio', JSON.stringify(portfolioData));
+        setPortfolio(portfolioData.holdings || []);
+      } else {
+        // Fallback to localStorage
+        const portfolioData = JSON.parse(localStorage.getItem('velox_portfolio') || '{"holdings": [], "stats": {}}');
+        setPortfolio(portfolioData.holdings || []);
       }
     } catch (error) {
       console.error('Portfolio loading error:', error);
+      // Fallback to localStorage
+      const portfolioData = JSON.parse(localStorage.getItem('velox_portfolio') || '{"holdings": [], "stats": {}}');
+      setPortfolio(portfolioData.holdings || []);
     }
   };
 
   const loadWatchlist = async () => {
     try {
+      // Load from localStorage
       const watchlistData = JSON.parse(localStorage.getItem('velox_watchlist') || '[]');
       setWatchlist(watchlistData);
-      
-      // Sync with API if available
-      const response = await fetch(`${config.API_BASE_URL}/watchlist`);
-      if (response.ok) {
-        const apiData = await response.json();
-        if (apiData.success) {
-          setWatchlist(apiData.watchlist || []);
-          localStorage.setItem('velox_watchlist', JSON.stringify(apiData.watchlist));
-        }
-      }
     } catch (error) {
       console.error('Watchlist loading error:', error);
+      setWatchlist([]);
     }
   };
 
@@ -187,28 +211,22 @@ export const StocksProvider = ({ children }) => {
     if (!stocks.length || !marketStatus.isOpen) return;
     
     try {
-      const symbols = stocks.slice(0, 20).map(s => s.symbol); // Limit to 20 symbols
-      const response = await fetch(`${config.API_BASE_URL}/stocks/realtime`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ symbols })
-      });
+      const symbols = stocks.slice(0, 20).map(s => s.symbol);
+      const result = await api.market.getLiveData(symbols.join(','));
       
-      if (response.ok) {
-        const result = await response.json();
-        if (result.success) {
-          setRealTimeData(prev => {
-            const updated = { ...prev };
-            result.data.forEach(stock => {
-              updated[stock.symbol] = {
-                ...prev[stock.symbol],
-                ...stock,
-                lastUpdated: new Date().toISOString()
-              };
-            });
-            return updated;
+      if (result.success && result.recommendations) {
+        setRealTimeData(prev => {
+          const updated = { ...prev };
+          result.recommendations.forEach(stock => {
+            updated[stock.symbol] = {
+              ...prev[stock.symbol],
+              price: stock.currentPrice,
+              changePercent: stock.changePercent,
+              lastUpdated: new Date().toISOString()
+            };
           });
-        }
+          return updated;
+        });
       }
     } catch (error) {
       console.error('Real-time update error:', error);
@@ -222,17 +240,17 @@ export const StocksProvider = ({ children }) => {
       const updated = { ...prev };
       Object.keys(updated).forEach(symbol => {
         const current = updated[symbol];
-        const change = (Math.random() - 0.5) * 0.02; // ±2%
-        const newPrice = current.price * (1 + change);
-        
-        updated[symbol] = {
-          ...current,
-          price: parseFloat(newPrice.toFixed(2)),
-          change: parseFloat((newPrice - (current.prevClose || current.price)).toFixed(2)),
-          changePercent: parseFloat((change * 100).toFixed(2)),
-          volume: Math.floor(current.volume * (1 + Math.random() * 0.1)),
-          lastUpdated: new Date().toISOString()
-        };
+        if (current && current.price) {
+          const change = (Math.random() - 0.5) * 0.02; // ±2%
+          const newPrice = current.price * (1 + change);
+          
+          updated[symbol] = {
+            ...current,
+            price: parseFloat(newPrice.toFixed(2)),
+            changePercent: parseFloat((change * 100).toFixed(2)),
+            lastUpdated: new Date().toISOString()
+          };
+        }
       });
       return updated;
     });
@@ -244,24 +262,20 @@ export const StocksProvider = ({ children }) => {
 
   const getStockDetails = async (symbol) => {
     try {
-      const response = await fetch(`${config.API_BASE_URL}/stocks/${symbol}`);
-      if (response.ok) {
-        const result = await response.json();
-        if (result.success) {
-          return result.data;
-        }
+      const result = await api.market.getStockData(symbol);
+      if (result.success && result.data) {
+        return result.data;
       }
       throw new Error('Failed to fetch stock details');
     } catch (err) {
       console.error('Failed to get stock details:', err);
-      // Return basic structure if API fails
-      return {
+      // Return from local data
+      const stock = stocks.find(s => s.symbol === symbol);
+      return stock || {
         symbol,
         name: symbol,
         currentPrice: realTimeData[symbol]?.price || 0,
-        change: realTimeData[symbol]?.change || 0,
         changePercent: realTimeData[symbol]?.changePercent || 0,
-        data: realTimeData[symbol] || {}
       };
     }
   };
@@ -273,13 +287,6 @@ export const StocksProvider = ({ children }) => {
       
       // Save to localStorage
       localStorage.setItem('velox_watchlist', JSON.stringify(updatedWatchlist));
-      
-      // Sync with API
-      await fetch(`${config.API_BASE_URL}/watchlist/add`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ symbol: stock.symbol })
-      });
       
       return { success: true };
     } catch (error) {
@@ -294,12 +301,6 @@ export const StocksProvider = ({ children }) => {
       setWatchlist(updatedWatchlist);
       
       localStorage.setItem('velox_watchlist', JSON.stringify(updatedWatchlist));
-      
-      await fetch(`${config.API_BASE_URL}/watchlist/remove`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ symbol })
-      });
       
       return { success: true };
     } catch (error) {
@@ -318,8 +319,8 @@ export const StocksProvider = ({ children }) => {
 
   const calculatePortfolioValue = () => {
     return portfolio.reduce((total, holding) => {
-      const currentPrice = getStockPrice(holding.symbol) || holding.averagePrice;
-      return total + (currentPrice * holding.quantity);
+      const currentPrice = getStockPrice(holding.symbol) || holding.averagePrice || 0;
+      return total + (currentPrice * (holding.quantity || 0));
     }, 0);
   };
 
@@ -327,8 +328,8 @@ export const StocksProvider = ({ children }) => {
     let totalPnL = 0;
     
     portfolio.forEach(holding => {
-      const currentPrice = getStockPrice(holding.symbol) || holding.averagePrice;
-      const pnl = (currentPrice - holding.averagePrice) * holding.quantity;
+      const currentPrice = getStockPrice(holding.symbol) || holding.averagePrice || 0;
+      const pnl = (currentPrice - (holding.averagePrice || 0)) * (holding.quantity || 0);
       totalPnL += pnl;
     });
     
@@ -337,7 +338,7 @@ export const StocksProvider = ({ children }) => {
 
   const calculateTotalInvestment = () => {
     return portfolio.reduce((total, holding) => {
-      return total + (holding.averagePrice * holding.quantity);
+      return total + ((holding.averagePrice || 0) * (holding.quantity || 0));
     }, 0);
   };
 
@@ -358,15 +359,14 @@ export const StocksProvider = ({ children }) => {
     try {
       const newHolding = {
         id: `HOLD_${Date.now()}`,
-        symbol: tradeData.stockSymbol,
-        name: tradeData.stockName,
-        quantity: tradeData.quantity,
-        averagePrice: tradeData.entryPrice,
+        symbol: tradeData.stockSymbol || tradeData.symbol,
+        name: tradeData.stockName || tradeData.name,
+        quantity: tradeData.quantity || 0,
+        averagePrice: tradeData.entryPrice || tradeData.price || 0,
         entryDate: new Date().toISOString(),
         tradeType: tradeData.tradeType || 'INTRADAY',
         stopLoss: tradeData.stopLoss,
-        target: tradeData.targetPrice,
-        broker: tradeData.broker,
+        target: tradeData.targetPrice || tradeData.target,
         status: 'ACTIVE'
       };
       
@@ -381,23 +381,15 @@ export const StocksProvider = ({ children }) => {
       };
       localStorage.setItem('velox_portfolio', JSON.stringify(portfolioData));
       
-      // Save trade to history
-      const trades = JSON.parse(localStorage.getItem('velox_trades') || '[]');
-      trades.push({
-        type: 'BUY',
-        ...tradeData,
-        tradeId: `TRADE_${Date.now()}`,
-        status: 'COMPLETED',
-        timestamp: new Date().toISOString()
-      });
-      localStorage.setItem('velox_trades', JSON.stringify(trades));
-      
-      // Sync with API
-      await fetch(`${config.API_BASE_URL}/portfolio/add`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newHolding)
-      });
+      // Try to save to API
+      try {
+        await api.trade.addTrade({
+          ...tradeData,
+          status: 'open'
+        });
+      } catch (apiError) {
+        console.warn('Failed to save trade to API, using localStorage only:', apiError);
+      }
       
       return { success: true, holding: newHolding };
     } catch (error) {
@@ -425,35 +417,16 @@ export const StocksProvider = ({ children }) => {
       localStorage.setItem('velox_portfolio', JSON.stringify(portfolioData));
       
       // Calculate P&L
-      const pnl = (exitData.exitPrice - holding.averagePrice) * holding.quantity;
-      const pnlPercent = ((exitData.exitPrice - holding.averagePrice) / holding.averagePrice) * 100;
+      const pnl = ((exitData.exitPrice || 0) - (holding.averagePrice || 0)) * (holding.quantity || 0);
+      const pnlPercent = holding.averagePrice ? 
+        (((exitData.exitPrice || 0) - holding.averagePrice) / holding.averagePrice) * 100 : 0;
       
-      // Save trade to history
-      const trades = JSON.parse(localStorage.getItem('velox_trades') || '[]');
-      trades.push({
-        type: 'SELL',
-        symbol: holding.symbol,
-        name: holding.name,
-        quantity: holding.quantity,
-        entryPrice: holding.averagePrice,
-        exitPrice: exitData.exitPrice,
-        pnl: parseFloat(pnl.toFixed(2)),
-        pnlPercent: parseFloat(pnlPercent.toFixed(2)),
-        holdingPeriod: exitData.holdingPeriod,
-        exitDate: new Date().toISOString(),
-        reason: exitData.exitReason,
-        status: 'COMPLETED',
-        tradeId: `TRADE_${Date.now()}`,
-        timestamp: new Date().toISOString()
-      });
-      localStorage.setItem('velox_trades', JSON.stringify(trades));
-      
-      // Sync with API
-      await fetch(`${config.API_BASE_URL}/portfolio/remove`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ holdingId, exitData })
-      });
+      // Try to update in API
+      try {
+        await api.trade.closeTrade(holdingId);
+      } catch (apiError) {
+        console.warn('Failed to update trade in API:', apiError);
+      }
       
       return { 
         success: true, 
@@ -479,11 +452,11 @@ export const StocksProvider = ({ children }) => {
     const dailyPnL = calculateDailyPnL();
     
     return {
-      currentValue,
-      investment,
-      returns,
+      currentValue: parseFloat(currentValue.toFixed(2)),
+      investment: parseFloat(investment.toFixed(2)),
+      returns: parseFloat(returns.toFixed(2)),
       returnsPercent: parseFloat(returnsPercent.toFixed(2)),
-      dailyPnL,
+      dailyPnL: parseFloat(dailyPnL.toFixed(2)),
       holdingsCount: portfolio.length,
       activeTrades: portfolio.filter(h => h.status === 'ACTIVE').length
     };
