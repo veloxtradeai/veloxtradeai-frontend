@@ -27,14 +27,13 @@ const Dashboard = () => {
   const [lastUpdate, setLastUpdate] = useState(new Date());
   
   // Safe portfolio stats with defaults
-  const safePortfolioStats = {
-    currentValue: portfolioStats?.currentValue || 0,
-    returnsPercent: portfolioStats?.returnsPercent || 0,
-    dailyPnL: portfolioStats?.dailyPnL || 0,
-    activeTrades: portfolioStats?.activeTrades || 0,
-    holdingsCount: portfolioStats?.holdingsCount || 0
-  };
-
+const safePortfolioStats = {
+  currentValue: portfolioStats?.currentValue || 0,
+  returnsPercent: portfolioStats?.returnsPercent || 0,
+  dailyPnL: portfolioStats?.dailyPnL || 0,
+  activeTrades: portfolioStats?.activeTrades || 0,
+  holdingsCount: portfolioStats?.holdingsCount || 0
+};
   // Safe market status with defaults
   const safeMarketStatus = {
     isOpen: marketStatus?.isOpen || false,
