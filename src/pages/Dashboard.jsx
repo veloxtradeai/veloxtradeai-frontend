@@ -2,6 +2,9 @@ import React, { useState, useEffect, useCallback } from 'react';
 import StockCard from '../components/StockCard';
 import EntryPopup from '../components/EntryPopup';
 import ExitPopup from '../components/ExitPopup';
+import { useLanguage } from '../contexts/LanguageContext';
+import { useStocks } from '../hooks/useStocks';
+import { portfolioAPI, tradeAPI, brokerAPI } from '../services/api';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -19,16 +22,14 @@ import {
   Monitor,
   Wifi,
   WifiOff,
-  Battery,
   BatteryCharging
 } from 'lucide-react';
-import { useStocks } from '../hooks/useStocks';
-import { portfolioAPI, tradeAPI, brokerAPI } from '../services/api';
 
 const Dashboard = () => {
+  const { t, isHindi, language } = useLanguage();
   const { stocks, loading, refreshStocks, marketStatus } = useStocks();
   
-  // 🔴 REAL STATE - NO FAKE DATA
+  // REAL STATE - NO FAKE DATA
   const [realPortfolio, setRealPortfolio] = useState({
     totalValue: 0,
     dailyPnL: 0,
@@ -57,12 +58,26 @@ const Dashboard = () => {
     api: false
   });
 
-  // 📡 REAL DATA FETCH - NO MOCK
+  // SAFE number formatter
+  const safeToFixed = (value, decimals = 2) => {
+    if (value === undefined || value === null || isNaN(Number(value))) {
+      return '0.00';
+    }
+    return Number(value).toFixed(decimals);
+  };
+
+  // FORMAT currency
+  const formatCurrency = (amount) => {
+    if (amount === undefined || amount === null) return '₹0';
+    return `₹${parseInt(amount).toLocaleString('en-IN')}`;
+  };
+
+  // REAL DATA FETCH
   const fetchRealData = useCallback(async () => {
     try {
-      console.log('🔄 असली डेटा फ़ेच कर रहा हूँ...');
+      console.log('🔄 Fetching real data...');
       
-      // 1. पोर्टफोलियो डेटा
+      // 1. Portfolio data
       const portfolioResponse = await portfolioAPI.getAnalytics();
       if (portfolioResponse.success && portfolioResponse.portfolio) {
         setRealPortfolio({
@@ -76,13 +91,13 @@ const Dashboard = () => {
         });
       }
 
-      // 2. एक्टिव ट्रेड्स
+      // 2. Active trades
       const tradesResponse = await tradeAPI.getTrades();
       if (tradesResponse.success && tradesResponse.trades) {
         setRealTrades(tradesResponse.trades);
       }
 
-      // 3. ब्रोकर कनेक्शन
+      // 3. Broker connection
       const brokersResponse = await brokerAPI.getBrokers();
       if (brokersResponse.success && brokersResponse.brokers) {
         setRealBrokers(brokersResponse.brokers);
@@ -90,31 +105,31 @@ const Dashboard = () => {
         setConnectionStatus(prev => ({ ...prev, broker: connected }));
       }
 
-      // 4. बैकेंड कनेक्शन चेक
+      // 4. Backend connection check
       setConnectionStatus(prev => ({ ...prev, api: true }));
       setIsBackendConnected(true);
       setLastUpdate(new Date());
       
     } catch (error) {
-      console.error('❌ रियल डेटा फ़ेच में एरर:', error);
+      console.error('❌ Real data fetch error:', error);
       setIsBackendConnected(false);
       setConnectionStatus({ broker: false, websocket: false, api: false });
     }
   }, []);
 
-  // 🔄 ऑटो रिफ़्रेश और डेटा फ़ेच
+  // AUTO REFRESH AND DATA FETCH
   useEffect(() => {
     fetchRealData();
     
     const interval = setInterval(() => {
       fetchRealData();
       setLastUpdate(new Date());
-    }, 30000); // हर 30 सेकंड में अपडेट
+    }, 30000);
 
     return () => clearInterval(interval);
   }, [fetchRealData]);
 
-  // 📱 मोबाइल/डेस्कटॉप डिटेक्शन
+  // MOBILE/DESKTOP DETECTION
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
     const checkMobile = () => {
@@ -125,7 +140,7 @@ const Dashboard = () => {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // 🎯 AI सिग्नल मिलने पर ऑटो पोपअप
+  // AUTO POPUP FOR HIGH CONFIDENCE STOCKS
   useEffect(() => {
     const highConfidenceStocks = stocks.filter(
       stock => stock.confidence >= 90 && stock.signal === 'strong_buy'
@@ -144,39 +159,39 @@ const Dashboard = () => {
     }
   }, [stocks, connectionStatus.broker]);
 
-  // 📊 रियल स्टैट्स - NO HARDCODED DATA
+  // REAL STATS - NO HARDCODED DATA
   const stats = [
     { 
-      title: 'पोर्टफोलियो वैल्यू', 
-      value: `₹${realPortfolio.totalValue.toLocaleString('en-IN')}`, 
-      change: `${realPortfolio.returnsPercent >= 0 ? '+' : ''}${realPortfolio.returnsPercent}%`, 
+      title: t('portfolioValue') || 'Portfolio Value', 
+      value: formatCurrency(realPortfolio.totalValue), 
+      change: `${realPortfolio.returnsPercent >= 0 ? '+' : ''}${safeToFixed(realPortfolio.returnsPercent)}%`, 
       icon: <DollarSign className="w-5 h-5 md:w-6 md:h-6" />,
       color: realPortfolio.returnsPercent >= 0 ? 'text-green-600' : 'text-red-600',
       bgColor: realPortfolio.returnsPercent >= 0 ? 'bg-green-100' : 'bg-red-100',
       trend: realPortfolio.returnsPercent >= 0 ? 'up' : 'down'
     },
     { 
-      title: 'दैनिक P&L', 
-      value: `₹${realPortfolio.dailyPnL >= 0 ? '+' : ''}${realPortfolio.dailyPnL.toLocaleString('en-IN')}`, 
-      change: 'आज', 
+      title: t('dailyPnL') || 'Daily P&L', 
+      value: `${realPortfolio.dailyPnL >= 0 ? '+' : ''}${formatCurrency(realPortfolio.dailyPnL)}`, 
+      change: t('today') || 'Today', 
       icon: <TrendingUp className="w-5 h-5 md:w-6 md:h-6" />,
       color: realPortfolio.dailyPnL >= 0 ? 'text-green-600' : 'text-red-600',
       bgColor: realPortfolio.dailyPnL >= 0 ? 'bg-green-100' : 'bg-red-100',
       trend: realPortfolio.dailyPnL >= 0 ? 'up' : 'down'
     },
     { 
-      title: 'विन रेट', 
+      title: t('winRate') || 'Win Rate', 
       value: realPortfolio.winRate, 
-      change: '90%+ टार्गेट', 
+      change: '90%+ Target', 
       icon: <Target className="w-5 h-5 md:w-6 md:h-6" />,
       color: 'text-blue-600',
       bgColor: 'bg-blue-100',
       trend: 'up'
     },
     { 
-      title: 'एक्टिव ट्रेड्स', 
+      title: t('activeTrades') || 'Active Trades', 
       value: realPortfolio.activeTrades.toString(), 
-      change: `${realPortfolio.holdingsCount} होल्डिंग्स`, 
+      change: `${realPortfolio.holdingsCount} ${t('holdings') || 'holdings'}`, 
       icon: <Activity className="w-5 h-5 md:w-6 md:h-6" />,
       color: 'text-purple-600',
       bgColor: 'bg-purple-100',
@@ -184,7 +199,7 @@ const Dashboard = () => {
     }
   ];
 
-  // 🏆 टॉप गेनर्स/लूज़र्स
+  // TOP GAINERS/LOSERS
   const getTopMovers = () => {
     if (!stocks.length) return { gainers: [], losers: [] };
     
@@ -203,11 +218,11 @@ const Dashboard = () => {
 
   const topMovers = getTopMovers();
 
-  // 🛒 ट्रेड हैंडलर - रियल ऑर्डर
+  // TRADE HANDLER - REAL ORDER
   const handleTrade = async (type, data) => {
     try {
       if (!connectionStatus.broker) {
-        alert('पहले ब्रोकर कनेक्ट करें!');
+        alert(isHindi ? 'पहले ब्रोकर कनेक्ट करें!' : 'Please connect broker first!');
         return;
       }
       
@@ -224,31 +239,31 @@ const Dashboard = () => {
       
       const result = await brokerAPI.placeOrder(orderData);
       if (result.success) {
-        alert(`✅ ऑर्डर प्लेस हुआ: ${result.orderId}`);
-        fetchRealData(); // रिफ़्रेश डेटा
+        alert(isHindi ? `✅ ऑर्डर प्लेस हुआ: ${result.orderId}` : `✅ Order placed: ${result.orderId}`);
+        fetchRealData();
       } else {
-        alert(`❌ ऑर्डर फेल: ${result.message}`);
+        alert(isHindi ? `❌ ऑर्डर फेल: ${result.message}` : `❌ Order failed: ${result.message}`);
       }
     } catch (error) {
-      console.error('ट्रेड एरर:', error);
-      alert('ऑर्डर में समस्या!');
+      console.error('Trade error:', error);
+      alert(isHindi ? 'ऑर्डर में समस्या!' : 'Order error!');
     }
   };
 
-  // ✨ SL/TGT ऑटो एडजस्ट
+  // AUTO ADJUST SL/TGT
   const handleAutoAdjust = async (tradeId, currentPrice) => {
     try {
       const result = await tradeAPI.autoAdjust(tradeId, currentPrice);
       if (result.success) {
-        console.log('✅ SL/TGT अपडेटेड:', result);
+        console.log('✅ SL/TGT updated:', result);
         fetchRealData();
       }
     } catch (error) {
-      console.error('ऑटो एडजस्ट एरर:', error);
+      console.error('Auto adjust error:', error);
     }
   };
 
-  // 🎛️ फ़िल्टर स्टॉक्स
+  // FILTER STOCKS
   const filteredStocks = stocks.filter(stock => {
     if (filters.signal !== 'all' && stock.signal !== filters.signal) return false;
     if (filters.risk !== 'all' && stock.riskLevel !== filters.risk) return false;
@@ -266,7 +281,7 @@ const Dashboard = () => {
 
   return (
     <div className="space-y-4 md:space-y-6 p-3 md:p-0">
-      {/* 📱 मोबाइल हेडर बार */}
+      {/* MOBILE HEADER BAR */}
       {isMobile && (
         <div className="bg-white border-b border-gray-200 p-3 fixed top-0 left-0 right-0 z-50 flex items-center justify-between">
           <div className="flex items-center space-x-2">
@@ -280,23 +295,25 @@ const Dashboard = () => {
         </div>
       )}
 
-      {/* 📊 मोबाइल स्पेसिंग */}
+      {/* MOBILE SPACING */}
       <div className={isMobile ? 'pt-12' : ''}>
-        {/* हेडर */}
+        {/* HEADER */}
         <div className="flex flex-col md:flex-row md:items-center justify-between">
           <div>
-            <h1 className="text-xl md:text-2xl font-bold text-gray-900">डैशबोर्ड</h1>
+            <h1 className="text-xl md:text-2xl font-bold text-gray-900">{t('dashboard') || 'Dashboard'}</h1>
             <div className="flex flex-wrap items-center gap-2 mt-1">
-              <p className="text-sm md:text-base text-gray-600">रियल-टाइम ट्रेडिंग इनसाइट्स</p>
+              <p className="text-sm md:text-base text-gray-600">
+                {isHindi ? 'रियल-टाइम ट्रेडिंग इनसाइट्स' : 'Real-time trading insights'}
+              </p>
               {marketStatus.isOpen ? (
                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
                   <div className="w-1.5 h-1.5 bg-green-500 rounded-full mr-1 animate-pulse"></div>
-                  बाज़ार खुला
+                  {t('marketOpen') || 'Market Open'}
                 </span>
               ) : (
                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
                   <Clock className="w-3 h-3 mr-1" />
-                  बाज़ार बंद
+                  {t('marketClosed') || 'Market Closed'}
                 </span>
               )}
             </div>
@@ -312,17 +329,17 @@ const Dashboard = () => {
               className="flex items-center justify-center space-x-2 px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 text-sm md:text-base"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-              <span>रिफ़्रेश</span>
+              <span>{t('refresh') || 'Refresh'}</span>
             </button>
             
             <div className="text-right">
-              <span className="text-xs md:text-sm text-gray-500">अपडेट</span>
+              <span className="text-xs md:text-sm text-gray-500">{isHindi ? 'अपडेट' : 'Updated'}</span>
               <p className="text-xs md:text-sm font-medium">{formatTime(lastUpdate)}</p>
             </div>
           </div>
         </div>
 
-        {/* 🔌 कनेक्शन स्टेटस */}
+        {/* CONNECTION STATUS */}
         <div className="bg-gradient-to-r from-gray-50 to-blue-50 border border-gray-200 rounded-xl p-4 mt-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center space-x-3">
@@ -333,10 +350,12 @@ const Dashboard = () => {
               )}
               <div>
                 <h3 className="font-medium text-gray-800">
-                  {isBackendConnected ? 'बैकेंड कनेक्टेड' : 'बैकेंड डिस्कनेक्टेड'}
+                  {isBackendConnected ? 
+                    (isHindi ? 'बैकेंड कनेक्टेड' : 'Backend Connected') : 
+                    (isHindi ? 'बैकेंड डिस्कनेक्टेड' : 'Backend Disconnected')}
                 </h3>
                 <p className="text-xs text-gray-600">
-                  ब्रोकर्स: {realBrokers.filter(b => b.status === 'connected').length} कनेक्टेड
+                  {isHindi ? 'ब्रोकर्स:' : 'Brokers:'} {realBrokers.filter(b => b.status === 'connected').length} {isHindi ? 'कनेक्टेड' : 'Connected'}
                 </p>
               </div>
             </div>
@@ -348,16 +367,16 @@ const Dashboard = () => {
                 ) : (
                   <Monitor className="w-4 h-4 text-purple-500" />
                 )}
-                <span className="text-xs">{isMobile ? 'मोबाइल' : 'डेस्कटॉप'}</span>
+                <span className="text-xs">{isMobile ? (isHindi ? 'मोबाइल' : 'Mobile') : (isHindi ? 'डेस्कटॉप' : 'Desktop')}</span>
               </div>
               <div className="text-xs text-gray-500">
-                v1.0 | Real-Time
+                v1.0 | {language === 'hi' ? 'हिंदी' : 'English'}
               </div>
             </div>
           </div>
         </div>
 
-        {/* 📊 स्टैट्स ग्रिड - मोबाइल फ्रेंडली */}
+        {/* STATS GRID */}
         <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mt-4">
           {stats.map((stat, index) => (
             <div key={index} className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md transition-shadow">
@@ -379,16 +398,16 @@ const Dashboard = () => {
           ))}
         </div>
 
-        {/* 🏆 टॉप मूवर्स - मोबाइल में स्टैक्ड */}
+        {/* TOP MOVERS */}
         <div className="flex flex-col md:flex-row gap-4 md:gap-6 mt-4 md:mt-6">
-          {/* टॉप गेनर्स */}
+          {/* TOP GAINERS */}
           <div className="bg-white rounded-xl border border-gray-200 p-4 md:p-6 flex-1">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-base md:text-lg font-semibold flex items-center space-x-2">
                 <Zap className="w-4 h-4 md:w-5 md:h-5 text-green-500" />
-                <span>टॉप गेनर्स</span>
+                <span>{isHindi ? 'टॉप गेनर्स' : 'Top Gainers'}</span>
               </h2>
-              <span className="text-xs md:text-sm text-green-600">लाइव</span>
+              <span className="text-xs md:text-sm text-green-600">{isHindi ? 'लाइव' : 'Live'}</span>
             </div>
             
             <div className="space-y-2">
@@ -399,9 +418,9 @@ const Dashboard = () => {
                     <p className="text-xs text-gray-500 truncate">{stock.name || stock.symbol}</p>
                   </div>
                   <div className="text-right ml-2">
-                    <p className="font-bold text-sm md:text-base">₹{stock.currentPrice.toFixed(2)}</p>
+                    <p className="font-bold text-sm md:text-base">₹{safeToFixed(stock.currentPrice)}</p>
                     <p className="text-xs md:text-sm text-green-600 font-medium">
-                      +{stock.changePercent?.toFixed(2) || '0.00'}%
+                      +{safeToFixed(stock.changePercent)}%
                     </p>
                   </div>
                 </div>
@@ -409,14 +428,14 @@ const Dashboard = () => {
             </div>
           </div>
 
-          {/* टॉप लूज़र्स */}
+          {/* TOP LOSERS */}
           <div className="bg-white rounded-xl border border-gray-200 p-4 md:p-6 flex-1">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-base md:text-lg font-semibold flex items-center space-x-2">
                 <TrendingDown className="w-4 h-4 md:w-5 md:h-5 text-red-500" />
-                <span>टॉप लूज़र्स</span>
+                <span>{isHindi ? 'टॉप लूज़र्स' : 'Top Losers'}</span>
               </h2>
-              <span className="text-xs md:text-sm text-red-600">लाइव</span>
+              <span className="text-xs md:text-sm text-red-600">{isHindi ? 'लाइव' : 'Live'}</span>
             </div>
             
             <div className="space-y-2">
@@ -427,9 +446,9 @@ const Dashboard = () => {
                     <p className="text-xs text-gray-500 truncate">{stock.name || stock.symbol}</p>
                   </div>
                   <div className="text-right ml-2">
-                    <p className="font-bold text-sm md:text-base">₹{stock.currentPrice.toFixed(2)}</p>
+                    <p className="font-bold text-sm md:text-base">₹{safeToFixed(stock.currentPrice)}</p>
                     <p className="text-xs md:text-sm text-red-600 font-medium">
-                      {stock.changePercent?.toFixed(2) || '0.00'}%
+                      {safeToFixed(stock.changePercent)}%
                     </p>
                   </div>
                 </div>
@@ -438,7 +457,7 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* 📈 टैब्स - मोबाइल में फुल विड्थ */}
+        {/* TABS */}
         <div className="bg-white rounded-xl border border-gray-200 mt-4 md:mt-6 overflow-hidden">
           <div className="border-b border-gray-200 overflow-x-auto">
             <nav className="flex min-w-max md:min-w-0">
@@ -450,7 +469,7 @@ const Dashboard = () => {
                     : 'border-transparent text-gray-500 hover:text-gray-700'
                 }`}
               >
-                AI सिफ़ारिशें
+                {isHindi ? 'AI सिफ़ारिशें' : 'AI Recommendations'}
               </button>
               <button
                 onClick={() => setActiveTab('active')}
@@ -460,7 +479,7 @@ const Dashboard = () => {
                     : 'border-transparent text-gray-500 hover:text-gray-700'
                 }`}
               >
-                एक्टिव ट्रेड्स ({realPortfolio.activeTrades})
+                {isHindi ? 'एक्टिव ट्रेड्स' : 'Active Trades'} ({realPortfolio.activeTrades})
               </button>
               <button
                 onClick={() => setActiveTab('watchlist')}
@@ -470,23 +489,23 @@ const Dashboard = () => {
                     : 'border-transparent text-gray-500 hover:text-gray-700'
                 }`}
               >
-                वॉचलिस्ट
+                {isHindi ? 'वॉचलिस्ट' : 'Watchlist'}
               </button>
             </nav>
           </div>
 
-          {/* 📱 मोबाइल टैब कंटेंट */}
+          {/* TAB CONTENT */}
           <div className="p-4 md:p-6">
             {activeTab === 'recommendations' && (
               <div>
-                {/* फ़िल्टर्स - मोबाइल में स्टैक्ड */}
+                {/* FILTERS */}
                 <div className="mb-6">
                   <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-2">
                     <h2 className="text-base md:text-lg font-semibold flex items-center space-x-2">
                       <Filter className="w-4 h-4 md:w-5 md:h-5" />
-                      <span>AI स्टॉक सिफ़ारिशें</span>
+                      <span>{isHindi ? 'AI स्टॉक सिफ़ारिशें' : 'AI Stock Recommendations'}</span>
                     </h2>
-                    <span className="text-sm text-gray-500">{filteredStocks.length} स्टॉक्स मिले</span>
+                    <span className="text-sm text-gray-500">{filteredStocks.length} {isHindi ? 'स्टॉक्स मिले' : 'stocks found'}</span>
                   </div>
                   
                   <div className="flex flex-col md:flex-row md:flex-wrap gap-3">
@@ -495,10 +514,10 @@ const Dashboard = () => {
                       onChange={(e) => setFilters({ ...filters, signal: e.target.value })}
                       className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
                     >
-                      <option value="all">सभी सिग्नल</option>
-                      <option value="strong_buy">स्ट्रॉन्ग बाय</option>
-                      <option value="buy">बाय</option>
-                      <option value="neutral">न्यूट्रल</option>
+                      <option value="all">{isHindi ? 'सभी सिग्नल' : 'All Signals'}</option>
+                      <option value="strong_buy">{isHindi ? 'स्ट्रॉन्ग बाय' : 'Strong Buy'}</option>
+                      <option value="buy">{isHindi ? 'बाय' : 'Buy'}</option>
+                      <option value="neutral">{isHindi ? 'न्यूट्रल' : 'Neutral'}</option>
                     </select>
 
                     <select
@@ -506,10 +525,10 @@ const Dashboard = () => {
                       onChange={(e) => setFilters({ ...filters, risk: e.target.value })}
                       className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
                     >
-                      <option value="all">सभी रिस्क</option>
-                      <option value="low">कम रिस्क</option>
-                      <option value="medium">मध्यम रिस्क</option>
-                      <option value="high">उच्च रिस्क</option>
+                      <option value="all">{isHindi ? 'सभी रिस्क' : 'All Risk'}</option>
+                      <option value="low">{isHindi ? 'कम रिस्क' : 'Low Risk'}</option>
+                      <option value="medium">{isHindi ? 'मध्यम रिस्क' : 'Medium Risk'}</option>
+                      <option value="high">{isHindi ? 'उच्च रिस्क' : 'High Risk'}</option>
                     </select>
 
                     <select
@@ -517,27 +536,31 @@ const Dashboard = () => {
                       onChange={(e) => setFilters({ ...filters, timeFrame: e.target.value })}
                       className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
                     >
-                      <option value="all">सभी टाइमफ्रेम</option>
-                      <option value="intraday">इंट्राडे</option>
-                      <option value="swing">स्विंग (1-5 दिन)</option>
-                      <option value="positional">पोजिशनल (5-30 दिन)</option>
+                      <option value="all">{isHindi ? 'सभी टाइमफ्रेम' : 'All Timeframes'}</option>
+                      <option value="intraday">{isHindi ? 'इंट्राडे' : 'Intraday'}</option>
+                      <option value="swing">{isHindi ? 'स्विंग' : 'Swing'}</option>
+                      <option value="positional">{isHindi ? 'पोजिशनल' : 'Positional'}</option>
                     </select>
 
                     <button
                       onClick={() => setFilters({ signal: 'all', risk: 'all', timeFrame: 'all' })}
                       className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
                     >
-                      फ़िल्टर्स हटाएँ
+                      {isHindi ? 'फ़िल्टर्स हटाएँ' : 'Clear Filters'}
                     </button>
                   </div>
                 </div>
 
-                {/* स्टॉक कार्ड्स - मोबाइल में 1 कॉलम */}
+                {/* STOCK CARDS */}
                 {loading ? (
                   <div className="p-8 md:p-12 text-center">
                     <div className="animate-spin rounded-full h-10 w-10 md:h-12 md:w-12 border-b-2 border-blue-600 mx-auto"></div>
-                    <p className="mt-4 text-gray-600 text-sm md:text-base">AI सिफ़ारिशें लोड हो रही हैं...</p>
-                    <p className="text-xs md:text-sm text-gray-500">मार्केट डेटा एनालाइज़ हो रहा है</p>
+                    <p className="mt-4 text-gray-600">
+                      {isHindi ? 'AI सिफ़ारिशें लोड हो रही हैं...' : 'Loading AI recommendations...'}
+                    </p>
+                    <p className="text-xs md:text-sm text-gray-500">
+                      {isHindi ? 'मार्केट डेटा एनालाइज़ हो रहा है' : 'Analyzing market data'}
+                    </p>
                   </div>
                 ) : (
                   <div>
@@ -550,14 +573,19 @@ const Dashboard = () => {
                             onTrade={handleTrade}
                             isMobile={isMobile}
                             connectionStatus={connectionStatus}
+                            isHindi={isHindi}
                           />
                         ))}
                       </div>
                     ) : (
                       <div className="text-center py-8 md:py-12">
                         <Shield className="w-10 h-10 md:w-12 md:h-12 text-gray-400 mx-auto mb-4" />
-                        <p className="text-gray-500">कोई स्टॉक फ़िल्टर्स से मैच नहीं करता</p>
-                        <p className="text-xs md:text-sm text-gray-400 mt-1">फ़िल्टर्स बदलकर देखें</p>
+                        <p className="text-gray-500">
+                          {isHindi ? 'कोई स्टॉक फ़िल्टर्स से मैच नहीं करता' : 'No stocks match your filters'}
+                        </p>
+                        <p className="text-xs md:text-sm text-gray-400 mt-1">
+                          {isHindi ? 'फ़िल्टर्स बदलकर देखें' : 'Try changing your filters'}
+                        </p>
                       </div>
                     )}
                   </div>
@@ -567,17 +595,29 @@ const Dashboard = () => {
 
             {activeTab === 'active' && (
               <div>
-                <h2 className="text-base md:text-lg font-semibold mb-4">एक्टिव ट्रेड्स</h2>
+                <h2 className="text-base md:text-lg font-semibold mb-4">
+                  {isHindi ? 'एक्टिव ट्रेड्स' : 'Active Trades'}
+                </h2>
                 {realPortfolio.activeTrades > 0 && realTrades.length > 0 ? (
                   <div className="overflow-x-auto">
                     <table className="w-full min-w-max">
                       <thead>
                         <tr className="bg-gray-50">
-                          <th className="py-2 px-3 md:py-3 md:px-6 text-left text-xs md:text-sm font-medium text-gray-700">स्टॉक</th>
-                          <th className="py-2 px-3 md:py-3 md:px-6 text-left text-xs md:text-sm font-medium text-gray-700">एंट्री</th>
-                          <th className="py-2 px-3 md:py-3 md:px-6 text-left text-xs md:text-sm font-medium text-gray-700">करंट</th>
-                          <th className="py-2 px-3 md:py-3 md:px-6 text-left text-xs md:text-sm font-medium text-gray-700">P&L</th>
-                          <th className="py-2 px-3 md:py-3 md:px-6 text-left text-xs md:text-sm font-medium text-gray-700">एक्शन</th>
+                          <th className="py-2 px-3 md:py-3 md:px-6 text-left text-xs md:text-sm font-medium text-gray-700">
+                            {isHindi ? 'स्टॉक' : 'Stock'}
+                          </th>
+                          <th className="py-2 px-3 md:py-3 md:px-6 text-left text-xs md:text-sm font-medium text-gray-700">
+                            {isHindi ? 'एंट्री' : 'Entry'}
+                          </th>
+                          <th className="py-2 px-3 md:py-3 md:px-6 text-left text-xs md:text-sm font-medium text-gray-700">
+                            {isHindi ? 'करंट' : 'Current'}
+                          </th>
+                          <th className="py-2 px-3 md:py-3 md:px-6 text-left text-xs md:text-sm font-medium text-gray-700">
+                            P&L
+                          </th>
+                          <th className="py-2 px-3 md:py-3 md:px-6 text-left text-xs md:text-sm font-medium text-gray-700">
+                            {isHindi ? 'एक्शन' : 'Action'}
+                          </th>
                         </tr>
                       </thead>
                       <tbody>
@@ -588,16 +628,16 @@ const Dashboard = () => {
                               <p className="text-xs text-gray-500">{trade.action}</p>
                             </td>
                             <td className="py-2 px-3 md:py-4 md:px-6">
-                              <p className="text-sm">₹{trade.entryPrice?.toFixed(2) || '0.00'}</p>
+                              <p className="text-sm">₹{safeToFixed(trade.entryPrice)}</p>
                             </td>
                             <td className="py-2 px-3 md:py-4 md:px-6">
-                              <p className="text-sm">₹{trade.currentPrice?.toFixed(2) || trade.entryPrice?.toFixed(2) || '0.00'}</p>
+                              <p className="text-sm">₹{safeToFixed(trade.currentPrice || trade.entryPrice)}</p>
                             </td>
                             <td className="py-2 px-3 md:py-4 md:px-6">
                               <p className={`text-sm font-medium ${
                                 (trade.pnl || 0) >= 0 ? 'text-green-600' : 'text-red-600'
                               }`}>
-                                ₹{trade.pnl?.toFixed(2) || '0.00'}
+                                ₹{safeToFixed(trade.pnl)}
                               </p>
                             </td>
                             <td className="py-2 px-3 md:py-4 md:px-6">
@@ -605,7 +645,7 @@ const Dashboard = () => {
                                 onClick={() => setExitPopupData(trade)}
                                 className="px-3 py-1 bg-red-100 text-red-700 rounded-lg text-xs hover:bg-red-200"
                               >
-                                एक्ज़िट
+                                {isHindi ? 'एक्ज़िट' : 'Exit'}
                               </button>
                             </td>
                           </tr>
@@ -616,8 +656,12 @@ const Dashboard = () => {
                 ) : (
                   <div className="text-center py-8 md:py-12">
                     <BarChart3 className="w-10 h-10 md:w-12 md:h-12 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-500">कोई एक्टिव ट्रेड नहीं</p>
-                    <p className="text-xs md:text-sm text-gray-400 mt-1">ऊपर सिफ़ारिशों से ट्रेड शुरू करें</p>
+                    <p className="text-gray-500">
+                      {isHindi ? 'कोई एक्टिव ट्रेड नहीं' : 'No active trades'}
+                    </p>
+                    <p className="text-xs md:text-sm text-gray-400 mt-1">
+                      {isHindi ? 'ऊपर सिफ़ारिशों से ट्रेड शुरू करें' : 'Start trading from recommendations above'}
+                    </p>
                   </div>
                 )}
               </div>
@@ -625,60 +669,81 @@ const Dashboard = () => {
 
             {activeTab === 'watchlist' && (
               <div>
-                <h2 className="text-base md:text-lg font-semibold mb-4">आपकी वॉचलिस्ट</h2>
+                <h2 className="text-base md:text-lg font-semibold mb-4">
+                  {isHindi ? 'आपकी वॉचलिस्ट' : 'Your Watchlist'}
+                </h2>
                 <div className="text-center py-8 md:py-12">
                   <Clock className="w-10 h-10 md:w-12 md:h-12 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-500">वॉचलिस्ट फीचर जल्द ही आ रहा है</p>
-                  <p className="text-xs md:text-sm text-gray-400 mt-1">स्टॉक्स वॉचलिस्ट में जोड़ें</p>
+                  <p className="text-gray-500">
+                    {isHindi ? 'वॉचलिस्ट फीचर जल्द ही आ रहा है' : 'Watchlist feature coming soon'}
+                  </p>
+                  <p className="text-xs md:text-sm text-gray-400 mt-1">
+                    {isHindi ? 'स्टॉक्स वॉचलिस्ट में जोड़ें' : 'Add stocks to your watchlist'}
+                  </p>
                 </div>
               </div>
             )}
           </div>
         </div>
 
-        {/* 📊 मार्केट इनसाइट्स */}
+        {/* MARKET INSIGHTS */}
         <div className="bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-100 rounded-xl p-4 md:p-6 mt-4 md:mt-6">
           <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-2">
             <h2 className="text-base md:text-lg font-semibold flex items-center space-x-2">
               <Activity className="w-4 h-4 md:w-5 md:h-5" />
-              <span>मार्केट इनसाइट्स</span>
+              <span>{isHindi ? 'मार्केट इनसाइट्स' : 'Market Insights'}</span>
             </h2>
-            <span className="text-xs md:text-sm text-blue-600">रियल-टाइम</span>
+            <span className="text-xs md:text-sm text-blue-600">
+              {isHindi ? 'रियल-टाइम' : 'Real-time'}
+            </span>
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="bg-white rounded-lg p-3 md:p-4">
-              <p className="text-xs md:text-sm text-gray-500 mb-1">मार्केट सेन्टीमेंट</p>
+              <p className="text-xs md:text-sm text-gray-500 mb-1">
+                {isHindi ? 'मार्केट सेन्टीमेंट' : 'Market Sentiment'}
+              </p>
               <div className="flex items-center space-x-2">
                 <div className="h-1.5 md:h-2 flex-1 bg-gray-200 rounded-full overflow-hidden">
                   <div className="h-full bg-green-500" style={{ width: '65%' }}></div>
                 </div>
-                <span className="text-xs md:text-sm font-medium text-green-600">बुलिश</span>
+                <span className="text-xs md:text-sm font-medium text-green-600">
+                  {isHindi ? 'बुलिश' : 'Bullish'}
+                </span>
               </div>
             </div>
             
             <div className="bg-white rounded-lg p-3 md:p-4">
-              <p className="text-xs md:text-sm text-gray-500 mb-1">वोलैटिलिटी इंडेक्स</p>
+              <p className="text-xs md:text-sm text-gray-500 mb-1">
+                {isHindi ? 'वोलैटिलिटी इंडेक्स' : 'Volatility Index'}
+              </p>
               <p className="text-base md:text-lg font-bold">18.4</p>
-              <p className="text-xs text-gray-500">मध्यम रिस्क</p>
+              <p className="text-xs text-gray-500">
+                {isHindi ? 'मध्यम रिस्क' : 'Medium Risk'}
+              </p>
             </div>
             
             <div className="bg-white rounded-lg p-3 md:p-4">
-              <p className="text-xs md:text-sm text-gray-500 mb-1">AI कॉन्फिडेंस</p>
+              <p className="text-xs md:text-sm text-gray-500 mb-1">
+                {isHindi ? 'AI कॉन्फिडेंस' : 'AI Confidence'}
+              </p>
               <p className="text-base md:text-lg font-bold">85.6%</p>
-              <p className="text-xs text-gray-500">उच्च एक्यूरेसी</p>
+              <p className="text-xs text-gray-500">
+                {isHindi ? 'उच्च एक्यूरेसी' : 'High Accuracy'}
+              </p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* ✨ पोपअप्स */}
+      {/* POPUPS */}
       {popupData && (
         <EntryPopup
           data={popupData}
           onClose={() => setPopupData(null)}
           onConfirm={handleTrade}
           isMobile={isMobile}
+          isHindi={isHindi}
         />
       )}
 
@@ -689,6 +754,7 @@ const Dashboard = () => {
           onExit={handleTrade}
           onAdjust={handleAutoAdjust}
           isMobile={isMobile}
+          isHindi={isHindi}
         />
       )}
     </div>
