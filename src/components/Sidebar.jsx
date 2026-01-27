@@ -17,30 +17,21 @@ import {
   PieChart,
   Rocket,
   Shield,
-  Sparkles,
-  Cpu,
-  Star,
-  Award,
-  Wifi,
-  BatteryCharging,
   RefreshCw,
   Menu,
   X,
   ChevronRight,
   Cloud,
-  Globe,
   ShieldCheck,
-  Coins,
-  Trophy,
-  Sparkle,
-  Brain,
-  LineChart,
-  TrendingDown,
-  BarChart,
   Users,
-  Clock,
   Smartphone,
-  Monitor
+  Monitor,
+  LineChart,
+  Globe,
+  BarChart,
+  Wallet2,
+  CreditCard,
+  FileText
 } from 'lucide-react';
 
 const Sidebar = ({ isOpen, toggleSidebar }) => {
@@ -48,7 +39,7 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
   const navigate = useNavigate();
   const [isMobile, setIsMobile] = useState(false);
   const [activeBrokers, setActiveBrokers] = useState(0);
-  const [aiConfidence, setAiConfidence] = useState(0);
+  const [aiConfidence, setAiConfidence] = useState(87);
 
   // Check mobile on mount and resize
   useEffect(() => {
@@ -60,216 +51,201 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // Fetch real broker data (simulated)
+  // Fetch real broker data
   useEffect(() => {
-    // In real app, fetch from API
-    const brokers = JSON.parse(localStorage.getItem('velox_brokers') || '[]');
-    const connected = brokers.filter(b => b.status === 'connected').length;
-    setActiveBrokers(connected);
+    // Real broker connections
+    const fetchBrokerConnections = () => {
+      try {
+        // Check localStorage for broker connections
+        const connections = JSON.parse(localStorage.getItem('velox_broker_connections') || '[]');
+        const active = connections.filter(conn => conn.status === 'connected');
+        setActiveBrokers(active.length);
+        
+        // Update AI confidence based on market data
+        const marketData = JSON.parse(localStorage.getItem('market_data') || 'null');
+        if (marketData && marketData.aiConfidence) {
+          setAiConfidence(marketData.aiConfidence);
+        }
+      } catch (error) {
+        console.error("Error fetching broker data:", error);
+      }
+    };
     
-    // Simulate AI confidence based on market
-    const confidence = Math.min(85 + Math.floor(Math.random() * 15), 98);
-    setAiConfidence(confidence);
+    fetchBrokerConnections();
+    const interval = setInterval(fetchBrokerConnections, 30000); // Update every 30 seconds
+    
+    return () => clearInterval(interval);
   }, []);
 
+  // Correct menu items - AI Signals REMOVED, Broker settings path fixed
   const menuItems = [
     { 
       path: '/dashboard', 
-      icon: <LayoutDashboard className="w-5 h-5" />, 
+      icon: <LayoutDashboard className="w-4 h-4" />, 
       label: 'Dashboard',
-      badge: '🔥',
       gradient: 'from-emerald-500 to-cyan-500',
-      iconBg: 'bg-gradient-to-br from-emerald-500 to-cyan-500',
       description: 'Real-time insights'
     },
     { 
       path: '/analytics', 
-      icon: <BarChart3 className="w-5 h-5" />, 
+      icon: <BarChart3 className="w-4 h-4" />, 
       label: 'Analytics',
       pro: true,
       gradient: 'from-purple-500 to-pink-500',
-      iconBg: 'bg-gradient-to-br from-purple-500 to-pink-500',
       description: 'Advanced charts'
     },
     { 
-      path: '/ai-signals', 
-      icon: <Brain className="w-5 h-5" />, 
-      label: 'AI Signals',
-      badge: 'AI',
-      gradient: 'from-violet-500 to-blue-500',
-      iconBg: 'bg-gradient-to-br from-violet-500 to-blue-500',
-      description: 'Smart predictions'
-    },
-    { 
-      path: '/broker', 
-      icon: <Building2 className="w-5 h-5" />, 
-      label: 'Broker',
+      path: '/broker-settings',  // Changed from '/broker' to '/broker-settings'
+      icon: <Building2 className="w-4 h-4" />, 
+      label: 'Broker Settings',
       count: activeBrokers,
       gradient: 'from-green-500 to-emerald-500',
-      iconBg: 'bg-gradient-to-br from-green-500 to-emerald-500',
       description: 'Manage accounts'
     },
     { 
       path: '/subscription', 
-      icon: <Crown className="w-5 h-5" />, 
+      icon: <Crown className="w-4 h-4" />, 
       label: 'Premium',
       status: 'PRO',
       gradient: 'from-yellow-500 to-orange-500',
-      iconBg: 'bg-gradient-to-br from-yellow-500 to-orange-500',
       description: 'Upgrade plan'
     },
     { 
       path: '/settings', 
-      icon: <Settings className="w-5 h-5" />, 
+      icon: <Settings className="w-4 h-4" />, 
       label: 'Settings',
       gradient: 'from-gray-600 to-slate-500',
-      iconBg: 'bg-gradient-to-br from-gray-600 to-slate-500',
       description: 'Preferences'
     },
   ];
 
   const quickStats = [
-    { label: 'AI Confidence', value: `${aiConfidence}%`, icon: <Brain className="w-4 h-4" />, color: 'text-emerald-400', bg: 'bg-emerald-500/20' },
-    { label: 'Market Trend', value: 'Bullish', icon: <TrendingUp className="w-4 h-4" />, color: 'text-green-400', bg: 'bg-green-500/20' },
-    { label: 'Volatility', value: 'Medium', icon: <Activity className="w-4 h-4" />, color: 'text-yellow-400', bg: 'bg-yellow-500/20' },
-  ];
-
-  const socialFeatures = [
-    { icon: '👑', label: 'Leaderboard', path: '/leaderboard' },
-    { icon: '🏆', label: 'Achievements', path: '/achievements' },
-    { icon: '🤝', label: 'Community', path: '/community' },
-    { icon: '🎮', label: 'Challenges', path: '/challenges' },
+    { label: 'AI Confidence', value: `${aiConfidence}%`, icon: <Activity className="w-3 h-3" />, color: 'text-emerald-400', bg: 'bg-emerald-500/20' },
+    { label: 'Market', value: 'Bullish', icon: <TrendingUp className="w-3 h-3" />, color: 'text-green-400', bg: 'bg-green-500/20' },
+    { label: 'Volatility', value: 'Medium', icon: <LineChart className="w-3 h-3" />, color: 'text-yellow-400', bg: 'bg-yellow-500/20' },
   ];
 
   return (
     <>
-      {/* Mobile Overlay */}
+      {/* Mobile Overlay - Only show when sidebar is open on mobile */}
       {isMobile && isOpen && (
         <div 
-          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-40 lg:hidden"
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-40 lg:hidden transition-all duration-300"
           onClick={toggleSidebar}
         />
       )}
 
       {/* Sidebar Container */}
       <aside className={`
-        fixed lg:relative h-full flex flex-col w-64 lg:w-72
-        bg-gradient-to-b from-gray-900 via-gray-900 to-gray-950
+        fixed lg:relative h-full flex flex-col w-64
+        bg-gradient-to-b from-gray-900 to-gray-950
         border-r border-emerald-900/30
-        shadow-2xl shadow-emerald-900/20
+        shadow-xl shadow-emerald-900/10
         z-50 lg:z-0
-        transition-transform duration-300 ease-in-out
+        transition-all duration-300 ease-in-out
         ${isMobile ? (isOpen ? 'translate-x-0' : '-translate-x-full') : 'translate-x-0'}
+        ${isMobile && isOpen ? 'shadow-2xl' : ''}
       `}>
         
-        {/* Logo Header with Glow */}
-        <div className="p-6 border-b border-emerald-900/30 bg-gradient-to-r from-gray-900 to-gray-950">
+        {/* Logo Header */}
+        <div className="p-4 border-b border-emerald-900/30 bg-gray-900">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
               <div className="relative">
-                <div className="absolute inset-0 bg-gradient-to-r from-emerald-500 to-cyan-500 rounded-2xl blur-lg opacity-50"></div>
-                <div className="relative bg-gradient-to-br from-gray-900 to-gray-950 p-2.5 rounded-2xl border border-emerald-500/30">
-                  <Rocket className="w-8 h-8 text-emerald-400" />
+                <div className="absolute inset-0 bg-gradient-to-r from-emerald-500 to-cyan-500 rounded-xl blur opacity-40"></div>
+                <div className="relative bg-gray-900 p-2 rounded-xl border border-emerald-500/20">
+                  <Rocket className="w-6 h-6 text-emerald-400" />
                 </div>
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-gradient-premium">
-                  VeloxTradeAI
-                </h1>
-                <p className="text-xs text-emerald-300/70 flex items-center mt-1">
-                  <Zap className="w-3 h-3 mr-1.5 text-yellow-400" />
-                  Professional Trading Platform
+                <h1 className="text-xl font-bold text-white">VeloxTradeAI</h1>
+                <p className="text-xs text-emerald-300/60 flex items-center mt-0.5">
+                  <Zap className="w-3 h-3 mr-1 text-yellow-400" />
+                  Professional Trading
                 </p>
               </div>
             </div>
             
-            {/* Mobile Close Button */}
+            {/* Mobile Close Button - Smaller */}
             {isMobile && (
               <button
                 onClick={toggleSidebar}
-                className="p-2 rounded-xl bg-gradient-to-br from-gray-800 to-gray-900 border border-emerald-900/30 hover:border-emerald-500 transition-all"
+                className="p-1.5 rounded-lg bg-gray-800 border border-emerald-900/30 hover:border-emerald-500 transition-all"
               >
-                <X className="w-5 h-5 text-emerald-400" />
+                <X className="w-4 h-4 text-emerald-400" />
               </button>
             )}
           </div>
         </div>
 
-        {/* User Profile - Premium Look */}
-        <div className="p-5 border-b border-emerald-900/30 bg-gradient-to-r from-gray-900/80 to-gray-950/80">
-          <div className="flex items-center space-x-4">
+        {/* User Profile - Smaller */}
+        <div className="p-4 border-b border-emerald-900/30 bg-gray-900/50">
+          <div className="flex items-center space-x-3">
             <div className="relative">
-              <div className="absolute inset-0 bg-gradient-to-br from-emerald-500 to-cyan-500 rounded-full blur-md opacity-60"></div>
-              <div className="relative w-14 h-14 bg-gradient-to-br from-emerald-600 to-cyan-500 rounded-full flex items-center justify-center border-2 border-gray-900">
-                <User className="w-7 h-7 text-white" />
+              <div className="relative w-10 h-10 bg-gradient-to-br from-emerald-600 to-cyan-500 rounded-full flex items-center justify-center border-2 border-gray-800">
+                <User className="w-5 h-5 text-white" />
               </div>
-              <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-gradient-to-r from-yellow-500 to-orange-500 rounded-full border-2 border-gray-900 flex items-center justify-center">
-                <Shield className="w-3 h-3 text-white" />
+              <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-gradient-to-r from-yellow-500 to-orange-500 rounded-full border border-gray-800 flex items-center justify-center">
+                <Shield className="w-2 h-2 text-white" />
               </div>
             </div>
             
-            <div className="flex-1 min-w-0">
+            <div className="flex-1">
               <div className="flex items-center justify-between">
-                <div className="font-bold text-lg text-white truncate">Trader Pro</div>
-                <div className="flex items-center">
-                  <Sparkles className="w-4 h-4 text-yellow-400 mr-1.5" />
-                  <span className="text-xs bg-gradient-to-r from-yellow-600 via-orange-600 to-red-600 text-white px-3 py-1 rounded-full font-bold">
-                    ELITE
-                  </span>
-                </div>
+                <div className="font-semibold text-white text-sm">Trader Pro</div>
+                <span className="text-xs bg-gradient-to-r from-yellow-600 to-orange-600 text-white px-2 py-0.5 rounded-full font-bold">
+                  ELITE
+                </span>
               </div>
               
-              <p className="text-sm text-emerald-300/80 flex items-center mt-1">
-                <Wallet className="w-3.5 h-3.5 mr-2" />
+              <p className="text-xs text-emerald-300/70 flex items-center mt-0.5">
+                <Wallet className="w-3 h-3 mr-1" />
                 Premium Member
               </p>
               
-              {/* Connection Status */}
-              <div className="mt-3 flex items-center justify-between">
-                <div className="flex items-center space-x-2">
+              {/* Connection Status - Smaller */}
+              <div className="mt-2 flex items-center justify-between">
+                <div className="flex items-center space-x-1.5">
                   <div className="flex items-center space-x-1">
-                    <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
+                    <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div>
                     <span className="text-xs text-emerald-400">Live</span>
                   </div>
-                  <div className="text-xs text-gray-400">•</div>
+                  <div className="text-xs text-gray-500">•</div>
                   <div className="flex items-center space-x-1">
-                    <Wifi className="w-3 h-3 text-emerald-400" />
                     <span className="text-xs text-emerald-400">{activeBrokers} Connected</span>
                   </div>
                 </div>
-                <BatteryCharging className="w-4 h-4 text-emerald-400" />
               </div>
             </div>
           </div>
         </div>
 
-        {/* Quick Stats Bar */}
-        <div className="px-5 py-3 bg-gradient-to-r from-emerald-900/20 to-cyan-900/10 border-y border-emerald-900/20">
-          <div className="grid grid-cols-3 gap-3">
+        {/* Quick Stats Bar - Smaller */}
+        <div className="px-4 py-2 bg-gradient-to-r from-emerald-900/10 to-cyan-900/5 border-y border-emerald-900/20">
+          <div className="grid grid-cols-3 gap-2">
             {quickStats.map((stat, index) => (
               <div 
                 key={index}
-                className="text-center p-2 rounded-xl bg-gradient-to-b from-gray-800/50 to-gray-900/30 border border-emerald-900/20 hover:border-emerald-500/30 transition-all"
+                className="text-center p-1.5 rounded-lg bg-gray-800/40 border border-emerald-900/20"
               >
-                <div className={`inline-flex p-1.5 rounded-lg ${stat.bg} mb-1`}>
+                <div className={`inline-flex p-1 rounded-md ${stat.bg} mb-1`}>
                   <div className={stat.color}>{stat.icon}</div>
                 </div>
-                <div className={`text-sm font-bold ${stat.color}`}>{stat.value}</div>
-                <div className="text-xs text-gray-400 mt-0.5">{stat.label}</div>
+                <div className={`text-xs font-bold ${stat.color}`}>{stat.value}</div>
+                <div className="text-xs text-gray-400">{stat.label}</div>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Main Navigation */}
-        <nav className="flex-1 p-5 overflow-y-auto sidebar-scroll">
-          <div className="mb-6">
-            <div className="text-xs uppercase tracking-wider text-emerald-400/70 font-bold mb-4 flex items-center">
-              <Sparkle className="w-3.5 h-3.5 mr-2" />
+        {/* Main Navigation - Smaller buttons */}
+        <nav className="flex-1 p-4 overflow-y-auto">
+          <div className="mb-4">
+            <div className="text-xs uppercase tracking-wider text-emerald-400/60 font-bold mb-3">
               TRADING SUITE
             </div>
             
-            <div className="space-y-2.5">
+            <div className="space-y-1.5">
               {menuItems.map((item) => {
                 const isActive = location.pathname === item.path;
                 return (
@@ -277,21 +253,21 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
                     key={item.path}
                     to={item.path}
                     className={`
-                      group flex items-center justify-between px-4 py-3.5 rounded-2xl
-                      transition-all duration-300 relative overflow-hidden
+                      group flex items-center justify-between px-3 py-2.5 rounded-xl
+                      transition-all duration-200 relative
                       ${isActive 
-                        ? `bg-gradient-to-r ${item.gradient} text-white shadow-lg shadow-${item.gradient.split('-')[1]}-500/30` 
-                        : 'bg-gradient-to-r from-gray-800/40 to-gray-900/30 text-gray-300 hover:text-white hover:bg-gray-800/60 border border-transparent hover:border-emerald-900/30'
+                        ? `bg-gradient-to-r ${item.gradient} text-white shadow-md` 
+                        : 'bg-gray-800/30 text-gray-300 hover:text-white hover:bg-gray-700/50 border border-transparent hover:border-emerald-900/20'
                       }
                     `}
                     onClick={() => isMobile && toggleSidebar()}
                   >
-                    <div className="flex items-center space-x-4">
+                    <div className="flex items-center space-x-3">
                       <div className={`
-                        p-2.5 rounded-xl transition-all duration-300
+                        p-1.5 rounded-lg transition-all
                         ${isActive 
-                          ? 'bg-white/20 backdrop-blur-sm' 
-                          : 'bg-gradient-to-br from-gray-800 to-gray-900 group-hover:bg-gray-700'
+                          ? 'bg-white/20' 
+                          : 'bg-gray-800 group-hover:bg-gray-700'
                         }
                       `}>
                         <div className={isActive ? 'text-white' : 'text-emerald-400'}>
@@ -300,142 +276,134 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
                       </div>
                       
                       <div>
-                        <div className={`font-semibold ${isActive ? 'text-white' : 'group-hover:text-white'}`}>
+                        <div className={`font-medium text-sm ${isActive ? 'text-white' : 'group-hover:text-white'}`}>
                           {item.label}
                         </div>
-                        <div className="text-xs text-emerald-300/60 mt-0.5">
+                        <div className="text-xs text-emerald-300/50">
                           {item.description}
                         </div>
                       </div>
                     </div>
                     
-                    <div className="flex items-center space-x-2">
-                      {item.badge && (
-                        <span className="text-xs bg-gradient-to-r from-yellow-600 to-orange-600 text-white px-2.5 py-1 rounded-full font-bold">
-                          {item.badge}
-                        </span>
-                      )}
+                    <div className="flex items-center space-x-1.5">
                       {item.pro && (
-                        <span className="text-xs bg-gradient-to-r from-purple-600 to-pink-600 text-white px-2.5 py-1 rounded-full font-bold">
+                        <span className="text-xs bg-gradient-to-r from-purple-600 to-pink-600 text-white px-1.5 py-0.5 rounded-full">
                           PRO
                         </span>
                       )}
                       {item.count !== undefined && (
-                        <span className="text-xs bg-gradient-to-r from-emerald-600 to-cyan-600 text-white px-2.5 py-1 rounded-full font-bold">
+                        <span className="text-xs bg-gradient-to-r from-emerald-600 to-cyan-600 text-white px-1.5 py-0.5 rounded-full">
                           {item.count}
                         </span>
                       )}
                       {item.status && (
-                        <span className="text-xs bg-gradient-to-r from-yellow-600 to-orange-600 text-white px-2.5 py-1 rounded-full font-bold">
+                        <span className="text-xs bg-gradient-to-r from-yellow-600 to-orange-600 text-white px-1.5 py-0.5 rounded-full">
                           {item.status}
                         </span>
                       )}
-                      <ChevronRight className={`w-4 h-4 transition-transform ${isActive ? 'rotate-90' : 'group-hover:translate-x-1'}`} />
+                      <ChevronRight className={`w-3 h-3 transition-transform ${isActive ? 'rotate-90' : 'group-hover:translate-x-0.5'}`} />
                     </div>
                     
                     {/* Active Indicator */}
                     {isActive && (
-                      <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-gradient-to-b from-emerald-400 to-cyan-400 rounded-r-full"></div>
+                      <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-emerald-400 to-cyan-400 rounded-r-full"></div>
                     )}
-                    
-                    {/* Shimmer Effect */}
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
                   </NavLink>
                 );
               })}
             </div>
           </div>
 
-          {/* Social & Community Features */}
-          <div className="mb-8">
-            <div className="text-xs uppercase tracking-wider text-emerald-400/70 font-bold mb-4 flex items-center">
-              <Users className="w-3.5 h-3.5 mr-2" />
-              COMMUNITY
+          {/* Reports & Data Section - NEW */}
+          <div className="mb-4">
+            <div className="text-xs uppercase tracking-wider text-emerald-400/60 font-bold mb-3">
+              REPORTS & DATA
             </div>
             
-            <div className="grid grid-cols-2 gap-3">
-              {socialFeatures.map((feature, index) => (
-                <button
-                  key={index}
-                  onClick={() => {
-                    navigate(feature.path);
-                    isMobile && toggleSidebar();
-                  }}
-                  className="group p-3 rounded-xl bg-gradient-to-br from-gray-800/40 to-gray-900/30 border border-emerald-900/20 hover:border-emerald-500/40 transition-all hover:scale-105"
-                >
-                  <div className="text-2xl mb-2">{feature.icon}</div>
-                  <div className="text-xs font-medium text-white">{feature.label}</div>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Real-time Market Stats */}
-          <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-900/20 to-cyan-900/10 border border-emerald-900/20">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center space-x-2">
-                <LineChart className="w-4 h-4 text-emerald-400" />
-                <span className="text-sm font-semibold text-white">Market Pulse</span>
-              </div>
-              <div className="text-xs bg-gradient-to-r from-emerald-600 to-cyan-600 text-white px-2 py-1 rounded-full">
-                LIVE
-              </div>
-            </div>
-            
-            <div className="space-y-2.5">
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-400">NIFTY 50</span>
-                <span className="text-sm font-bold text-emerald-400">+1.2%</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-400">SENSEX</span>
-                <span className="text-sm font-bold text-emerald-400">+0.8%</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-400">AI Accuracy</span>
-                <span className="text-sm font-bold text-emerald-400">{aiConfidence}%</span>
-              </div>
-            </div>
-            
-            <div className="mt-3 pt-3 border-t border-emerald-900/20">
-              <div className="flex items-center justify-center space-x-2 text-xs text-gray-400">
-                <Globe className="w-3.5 h-3.5" />
-                <span>Global Markets • Real-time</span>
-              </div>
+            <div className="space-y-1.5">
+              <button
+                onClick={() => {
+                  navigate('/reports');
+                  isMobile && toggleSidebar();
+                }}
+                className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl bg-gray-800/30 text-gray-300 hover:text-white hover:bg-gray-700/50 border border-transparent hover:border-emerald-900/20 transition-all"
+              >
+                <div className="flex items-center space-x-3">
+                  <div className="p-1.5 rounded-lg bg-gray-800">
+                    <FileText className="w-4 h-4 text-emerald-400" />
+                  </div>
+                  <div>
+                    <div className="font-medium text-sm">Trade Reports</div>
+                    <div className="text-xs text-emerald-300/50">Performance analytics</div>
+                  </div>
+                </div>
+                <ChevronRight className="w-3 h-3" />
+              </button>
+              
+              <button
+                onClick={() => {
+                  navigate('/transactions');
+                  isMobile && toggleSidebar();
+                }}
+                className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl bg-gray-800/30 text-gray-300 hover:text-white hover:bg-gray-700/50 border border-transparent hover:border-emerald-900/20 transition-all"
+              >
+                <div className="flex items-center space-x-3">
+                  <div className="p-1.5 rounded-lg bg-gray-800">
+                    <CreditCard className="w-4 h-4 text-emerald-400" />
+                  </div>
+                  <div>
+                    <div className="font-medium text-sm">Transactions</div>
+                    <div className="text-xs text-emerald-300/50">Payment history</div>
+                  </div>
+                </div>
+                <ChevronRight className="w-3 h-3" />
+              </button>
             </div>
           </div>
         </nav>
 
-        {/* Footer Actions */}
-        <div className="p-5 border-t border-emerald-900/30 bg-gradient-to-t from-gray-950 to-gray-900">
-          <div className="grid grid-cols-4 gap-3 mb-4">
-            <button className="group flex flex-col items-center justify-center p-2.5 rounded-xl bg-gradient-to-br from-emerald-900/30 to-emerald-800/20 border border-emerald-900/30 hover:border-emerald-500 transition-all">
-              <Bell className="w-5 h-5 text-emerald-400 group-hover:text-emerald-300" />
-              <span className="text-xs mt-1.5 text-emerald-300/70 group-hover:text-emerald-300">Alerts</span>
+        {/* Footer Actions - Smaller buttons */}
+        <div className="p-4 border-t border-emerald-900/30 bg-gray-900/50">
+          <div className="grid grid-cols-4 gap-2 mb-3">
+            <button 
+              onClick={() => navigate('/alerts')}
+              className="group flex flex-col items-center justify-center p-1.5 rounded-lg bg-gray-800/40 border border-emerald-900/30 hover:border-emerald-500 transition-all"
+            >
+              <Bell className="w-4 h-4 text-emerald-400 group-hover:text-emerald-300" />
+              <span className="text-xs mt-1 text-emerald-300/70 group-hover:text-emerald-300">Alerts</span>
             </button>
             
-            <button className="group flex flex-col items-center justify-center p-2.5 rounded-xl bg-gradient-to-br from-blue-900/30 to-blue-800/20 border border-blue-900/30 hover:border-blue-500 transition-all">
-              <HelpCircle className="w-5 h-5 text-blue-400 group-hover:text-blue-300" />
-              <span className="text-xs mt-1.5 text-blue-300/70 group-hover:text-blue-300">Support</span>
+            <button 
+              onClick={() => navigate('/support')}
+              className="group flex flex-col items-center justify-center p-1.5 rounded-lg bg-gray-800/40 border border-blue-900/30 hover:border-blue-500 transition-all"
+            >
+              <HelpCircle className="w-4 h-4 text-blue-400 group-hover:text-blue-300" />
+              <span className="text-xs mt-1 text-blue-300/70 group-hover:text-blue-300">Support</span>
             </button>
             
-            <button className="group flex flex-col items-center justify-center p-2.5 rounded-xl bg-gradient-to-br from-purple-900/30 to-purple-800/20 border border-purple-900/30 hover:border-purple-500 transition-all">
-              <Crown className="w-5 h-5 text-purple-400 group-hover:text-purple-300" />
-              <span className="text-xs mt-1.5 text-purple-300/70 group-hover:text-purple-300">Rewards</span>
+            <button 
+              onClick={() => navigate('/rewards')}
+              className="group flex flex-col items-center justify-center p-1.5 rounded-lg bg-gray-800/40 border border-purple-900/30 hover:border-purple-500 transition-all"
+            >
+              <Crown className="w-4 h-4 text-purple-400 group-hover:text-purple-300" />
+              <span className="text-xs mt-1 text-purple-300/70 group-hover:text-purple-300">Rewards</span>
             </button>
             
-            <button className="group flex flex-col items-center justify-center p-2.5 rounded-xl bg-gradient-to-br from-cyan-900/30 to-cyan-800/20 border border-cyan-900/30 hover:border-cyan-500 transition-all">
-              <RefreshCw className="w-5 h-5 text-cyan-400 group-hover:text-cyan-300" />
-              <span className="text-xs mt-1.5 text-cyan-300/70 group-hover:text-cyan-300">Refresh</span>
+            <button 
+              onClick={() => window.location.reload()}
+              className="group flex flex-col items-center justify-center p-1.5 rounded-lg bg-gray-800/40 border border-cyan-900/30 hover:border-cyan-500 transition-all"
+            >
+              <RefreshCw className="w-4 h-4 text-cyan-400 group-hover:text-cyan-300" />
+              <span className="text-xs mt-1 text-cyan-300/70 group-hover:text-cyan-300">Refresh</span>
             </button>
           </div>
 
           {/* Version & Status */}
-          <div className="text-center pt-3 border-t border-emerald-900/20">
-            <div className="text-xs text-emerald-300/50 mb-1">
-              VeloxTradeAI v3.0 • Elite Edition
+          <div className="text-center pt-2 border-t border-emerald-900/20">
+            <div className="text-xs text-emerald-300/40 mb-1">
+              v3.0 • Elite Edition
             </div>
-            <div className="flex items-center justify-center space-x-3 text-xs text-gray-500">
+            <div className="flex items-center justify-center space-x-2 text-xs text-gray-500">
               <div className="flex items-center space-x-1">
                 {isMobile ? (
                   <Smartphone className="w-3 h-3" />
