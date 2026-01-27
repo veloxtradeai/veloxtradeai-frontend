@@ -514,3 +514,57 @@ body {
 .bg-gradient-glow {
   background: linear-gradient(45deg, rgba(16, 185, 129, 0.1), rgba(6, 182, 212, 0.1), rgba(139, 92, 246, 0.1));
 }
+
+/* Theme Variables */
+:root {
+  --primary-gradient: linear-gradient(135deg, #10b981, #06b6d4);
+  --bg-gradient: linear-gradient(135deg, #111827, #030712);
+}
+
+/* Velox Dark (Default) */
+.theme-velox-dark {
+  --primary-gradient: linear-gradient(135deg, #10b981, #06b6d4);
+  --bg-gradient: linear-gradient(135deg, #111827, #030712);
+}
+
+/* Velox Light */
+.theme-velox-light {
+  --primary-gradient: linear-gradient(135deg, #059669, #0891b2);
+  --bg-gradient: linear-gradient(135deg, #f9fafb, #f3f4f6);
+}
+
+/* Neon Pro */
+.theme-velox-neon {
+  --primary-gradient: linear-gradient(135deg, #34d399, #22d3ee);
+  --bg-gradient: linear-gradient(135deg, #000000, #111827);
+}
+
+/* Ocean Blue */
+.theme-velox-ocean {
+  --primary-gradient: linear-gradient(135deg, #3b82f6, #06b6d4);
+  --bg-gradient: linear-gradient(135deg, #0f172a, #1e293b);
+}
+
+/* Sunset */
+.theme-velox-sunset {
+  --primary-gradient: linear-gradient(135deg, #f97316, #ec4899);
+  --bg-gradient: linear-gradient(135deg, #1e1b4b, #4c1d95);
+}
+
+/* Fire Red */
+.theme-velox-fire {
+  --primary-gradient: linear-gradient(135deg, #ef4444, #f97316);
+  --bg-gradient: linear-gradient(135deg, #450a0a, #7f1d1d);
+}
+
+/* Premium */
+.theme-velox-premium {
+  --primary-gradient: linear-gradient(135deg, #8b5cf6, #ec4899, #f43f5e);
+  --bg-gradient: linear-gradient(135deg, #1e1b4b, #4c1d95);
+}
+
+/* Apply to body */
+body {
+  background: var(--bg-gradient);
+  min-height: 100vh;
+}
