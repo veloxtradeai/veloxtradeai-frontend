@@ -1,38 +1,44 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 
 const ThemeContext = createContext();
 
-export const useTheme = () => useContext(ThemeContext);
+export const useTheme = () => {
+  const context = useContext(ThemeContext);
+  if (!context) {
+    throw new Error('useTheme must be used within a ThemeProvider');
+  }
+  return context;
+};
 
 export const ThemeProvider = ({ children }) => {
-  const [theme, setTheme] = useState(() => {
-    return localStorage.getItem('velox_theme') || 'light';
-  });
+  const [theme, setTheme] = useState('velox-dark');
+  const [themes] = useState([
+    { id: 'velox-dark', name: 'Velox Dark' },
+    { id: 'velox-light', name: 'Velox Light' },
+    { id: 'velox-neon', name: 'Neon Pro' },
+    { id: 'velox-ocean', name: 'Ocean Blue' },
+    { id: 'velox-sunset', name: 'Sunset' },
+    { id: 'velox-fire', name: 'Fire Red' },
+    { id: 'velox-premium', name: 'Premium' },
+  ]);
 
-  const themes = [
-    { id: 'light', name: 'Light', class: 'light-theme' },
-    { id: 'dark', name: 'Dark', class: 'dark-theme' },
-    { id: 'blue', name: 'Ocean Blue', class: 'blue-theme' },
-    { id: 'green', name: 'Forest Green', class: 'green-theme' },
-    { id: 'purple', name: 'Royal Purple', class: 'purple-theme' }
-  ];
-
+  // Load theme from localStorage on mount
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('velox_theme', theme);
-    
-    // Apply theme classes
-    themes.forEach(t => {
-      document.documentElement.classList.remove(t.class);
-    });
-    const currentTheme = themes.find(t => t.id === theme);
-    if (currentTheme) {
-      document.documentElement.classList.add(currentTheme.class);
+    const savedTheme = localStorage.getItem('velox_theme');
+    if (savedTheme) {
+      setTheme(savedTheme);
     }
-  }, [theme]);
+  }, []);
 
-  const changeTheme = (themeId) => {
-    setTheme(themeId);
+  const changeTheme = (newTheme) => {
+    setTheme(newTheme);
+    
+    // Apply theme classes to body
+    document.body.className = '';
+    document.body.classList.add(`theme-${newTheme}`);
+    
+    // Store in localStorage
+    localStorage.setItem('velox_theme', newTheme);
   };
 
   return (
