@@ -26,7 +26,10 @@ import {
   Menu,
   X,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  LineChart,
+  TrendingUp as TrendUp,
+  TrendingDown as TrendDown
 } from 'lucide-react';
 
 const Dashboard = () => {
@@ -62,9 +65,6 @@ const Dashboard = () => {
     api: false
   });
 
-  // MOBILE SIDEBAR STATE
-  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-
   // SAFE number formatter
   const safeToFixed = (value, decimals = 2) => {
     if (value === undefined || value === null || isNaN(Number(value))) {
@@ -76,7 +76,11 @@ const Dashboard = () => {
   // FORMAT currency
   const formatCurrency = (amount) => {
     if (amount === undefined || amount === null) return '₹0';
-    return `₹${parseInt(amount).toLocaleString('en-IN')}`;
+    const num = parseFloat(amount);
+    return `₹${num.toLocaleString('en-IN', { 
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2 
+    })}`;
   };
 
   // REAL DATA FETCH
@@ -136,22 +140,6 @@ const Dashboard = () => {
     return () => clearInterval(interval);
   }, [fetchRealData]);
 
-  // MOBILE/DESKTOP DETECTION
-  const [isMobile, setIsMobile] = useState(false);
-  useEffect(() => {
-    const checkMobile = () => {
-      const mobile = window.innerWidth < 768;
-      setIsMobile(mobile);
-      // Close sidebar if switching to desktop
-      if (!mobile && mobileSidebarOpen) {
-        setMobileSidebarOpen(false);
-      }
-    };
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, [mobileSidebarOpen]);
-
   // AUTO POPUP FOR HIGH CONFIDENCE STOCKS
   useEffect(() => {
     const highConfidenceStocks = stocks.filter(
@@ -177,37 +165,41 @@ const Dashboard = () => {
       title: t('portfolioValue') || 'Portfolio Value', 
       value: formatCurrency(realPortfolio.totalValue), 
       change: `${realPortfolio.returnsPercent >= 0 ? '+' : ''}${safeToFixed(realPortfolio.returnsPercent)}%`, 
-      icon: <DollarSign className="w-5 h-5 md:w-6 md:h-6" />,
-      color: realPortfolio.returnsPercent >= 0 ? 'text-green-600' : 'text-red-600',
-      bgColor: realPortfolio.returnsPercent >= 0 ? 'bg-green-100' : 'bg-red-100',
-      trend: realPortfolio.returnsPercent >= 0 ? 'up' : 'down'
+      icon: <DollarSign className="w-4 h-4 md:w-5 md:h-5" />,
+      color: realPortfolio.returnsPercent >= 0 ? 'text-emerald-400' : 'text-red-400',
+      bgColor: realPortfolio.returnsPercent >= 0 ? 'bg-emerald-500/20' : 'bg-red-500/20',
+      trend: realPortfolio.returnsPercent >= 0 ? 'up' : 'down',
+      borderColor: realPortfolio.returnsPercent >= 0 ? 'border-emerald-500/30' : 'border-red-500/30'
     },
     { 
       title: t('dailyPnL') || 'Daily P&L', 
       value: `${realPortfolio.dailyPnL >= 0 ? '+' : ''}${formatCurrency(realPortfolio.dailyPnL)}`, 
       change: t('today') || 'Today', 
-      icon: <TrendingUp className="w-5 h-5 md:w-6 md:h-6" />,
-      color: realPortfolio.dailyPnL >= 0 ? 'text-green-600' : 'text-red-600',
-      bgColor: realPortfolio.dailyPnL >= 0 ? 'bg-green-100' : 'bg-red-100',
-      trend: realPortfolio.dailyPnL >= 0 ? 'up' : 'down'
+      icon: <TrendingUp className="w-4 h-4 md:w-5 md:h-5" />,
+      color: realPortfolio.dailyPnL >= 0 ? 'text-emerald-400' : 'text-red-400',
+      bgColor: realPortfolio.dailyPnL >= 0 ? 'bg-emerald-500/20' : 'bg-red-500/20',
+      trend: realPortfolio.dailyPnL >= 0 ? 'up' : 'down',
+      borderColor: realPortfolio.dailyPnL >= 0 ? 'border-emerald-500/30' : 'border-red-500/30'
     },
     { 
       title: t('winRate') || 'Win Rate', 
       value: realPortfolio.winRate, 
       change: '90%+ Target', 
-      icon: <Target className="w-5 h-5 md:w-6 md:h-6" />,
-      color: 'text-blue-600',
-      bgColor: 'bg-blue-100',
-      trend: 'up'
+      icon: <Target className="w-4 h-4 md:w-5 md:h-5" />,
+      color: 'text-cyan-400',
+      bgColor: 'bg-cyan-500/20',
+      trend: 'up',
+      borderColor: 'border-cyan-500/30'
     },
     { 
       title: t('activeTrades') || 'Active Trades', 
       value: realPortfolio.activeTrades.toString(), 
       change: `${realPortfolio.holdingsCount} ${t('holdings') || 'holdings'}`, 
-      icon: <Activity className="w-5 h-5 md:w-6 md:h-6" />,
-      color: 'text-purple-600',
-      bgColor: 'bg-purple-100',
-      trend: 'neutral'
+      icon: <Activity className="w-4 h-4 md:w-5 md:h-5" />,
+      color: 'text-purple-400',
+      bgColor: 'bg-purple-500/20',
+      trend: 'neutral',
+      borderColor: 'border-purple-500/30'
     }
   ];
 
@@ -291,617 +283,538 @@ const Dashboard = () => {
     });
   };
 
-  // MOBILE NAVIGATION COMPONENT
-  const MobileNavigation = () => (
-    <div className="bg-white shadow-lg rounded-lg mb-4 p-3">
-      <div className="flex justify-between items-center mb-3">
-        <button
-          onClick={() => setMobileSidebarOpen(true)}
-          className="p-2 rounded-lg bg-blue-50 text-blue-600"
-        >
-          <Menu className="w-5 h-5" />
-        </button>
-        <div className="flex items-center space-x-3">
-          <button
-            onClick={() => {
-              refreshStocks();
-              fetchRealData();
-            }}
-            className="p-2 rounded-lg bg-gray-100"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          </button>
-          <div className="text-right">
-            <p className="text-xs text-gray-500">{formatTime(lastUpdate)}</p>
-          </div>
-        </div>
-      </div>
-      
-      <div className="flex overflow-x-auto space-x-2 pb-1">
-        <button
-          onClick={() => window.location.href = '/dashboard'}
-          className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium whitespace-nowrap"
-        >
-          {isHindi ? 'डैशबोर्ड' : 'Dashboard'}
-        </button>
-        <button
-          onClick={() => window.location.href = '/analytics'}
-          className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium whitespace-nowrap"
-        >
-          {isHindi ? 'एनालिटिक्स' : 'Analytics'}
-        </button>
-        <button
-          onClick={() => window.location.href = '/broker'}
-          className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium whitespace-nowrap"
-        >
-          {isHindi ? 'ब्रोकर' : 'Broker'}
-        </button>
-        <button
-          onClick={() => window.location.href = '/subscription'}
-          className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium whitespace-nowrap"
-        >
-          {isHindi ? 'सब्सक्रिप्शन' : 'Subscription'}
-        </button>
-      </div>
-    </div>
-  );
-
-  // MOBILE SIDEBAR MODAL
-  const MobileSidebar = () => (
-    <div className={`fixed inset-0 z-50 ${mobileSidebarOpen ? 'block' : 'hidden'}`}>
-      <div className="absolute inset-0 bg-black bg-opacity-50" onClick={() => setMobileSidebarOpen(false)}></div>
-      <div className="absolute left-0 top-0 h-full w-64 bg-white shadow-xl">
-        <div className="p-4 border-b">
-          <div className="flex justify-between items-center">
-            <h2 className="text-lg font-bold text-gray-800">VeloxTradeAI</h2>
-            <button onClick={() => setMobileSidebarOpen(false)} className="p-2">
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-          <p className="text-sm text-gray-500 mt-1">Premium Member</p>
-        </div>
-        
-        <div className="p-2">
-          <a href="/dashboard" className="flex items-center space-x-3 p-3 rounded-lg bg-blue-50 text-blue-600 mb-1">
-            <Activity className="w-5 h-5" />
-            <span>{isHindi ? 'डैशबोर्ड' : 'Dashboard'}</span>
-          </a>
-          <a href="/analytics" className="flex items-center space-x-3 p-3 rounded-lg text-gray-700 hover:bg-gray-100 mb-1">
-            <BarChart3 className="w-5 h-5" />
-            <span>{isHindi ? 'एनालिटिक्स' : 'Analytics'}</span>
-          </a>
-          <a href="/broker" className="flex items-center space-x-3 p-3 rounded-lg text-gray-700 hover:bg-gray-100 mb-1">
-            <TrendingUp className="w-5 h-5" />
-            <span>{isHindi ? 'ब्रोकर सेटिंग' : 'Broker Settings'}</span>
-          </a>
-          <a href="/subscription" className="flex items-center space-x-3 p-3 rounded-lg text-gray-700 hover:bg-gray-100 mb-1">
-            <Shield className="w-5 h-5" />
-            <span>{isHindi ? 'सब्सक्रिप्शन' : 'Subscription'}</span>
-          </a>
-          
-          <div className="mt-4 pt-4 border-t">
-            <button className="w-full flex items-center justify-center space-x-2 p-3 bg-red-50 text-red-600 rounded-lg">
-              <span>{isHindi ? 'लॉग आउट' : 'Logout'}</span>
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
+  // RESPONSIVE DESIGN - Tailwind classes will handle mobile/desktop
   return (
-    <div className="space-y-4 md:space-y-6 p-3 md:p-0 min-h-screen bg-gray-50">
-      {/* MOBILE NAVIGATION */}
-      {isMobile && <MobileNavigation />}
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-4 md:p-6">
       
-      {/* MOBILE SIDEBAR */}
-      {isMobile && <MobileSidebar />}
-
-      {/* MOBILE HEADER BAR */}
-      {isMobile && (
-        <div className="bg-white shadow-sm border-b border-gray-200 p-3 fixed top-0 left-0 right-0 z-40 flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <div className={`w-2 h-2 rounded-full ${isBackendConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
-            <span className="text-sm font-bold text-blue-600">VeloxTradeAI</span>
+      {/* HEADER SECTION */}
+      <div className="mb-6 md:mb-8">
+        <div className="flex flex-col md:flex-row md:items-center justify-between mb-4">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
+              {t('dashboard') || 'Dashboard'}
+            </h1>
+            <p className="text-sm text-emerald-300/80 mt-1">
+              {isHindi ? 'रियल-टाइम ट्रेडिंग इनसाइट्स' : 'Real-time trading insights'}
+            </p>
           </div>
-          <div className="flex items-center space-x-2">
-            <div className={`px-2 py-1 rounded text-xs ${marketStatus.isOpen ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-              {marketStatus.isOpen ? (isHindi ? 'खुला' : 'OPEN') : (isHindi ? 'बंद' : 'CLOSED')}
+          
+          <div className="flex items-center space-x-3 mt-3 md:mt-0">
+            <button
+              onClick={() => {
+                refreshStocks();
+                fetchRealData();
+              }}
+              disabled={loading}
+              className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600/20 to-cyan-600/20 border border-emerald-500/30 hover:border-emerald-400/50 transition-all disabled:opacity-50"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''} text-emerald-400`} />
+              <span className="text-sm text-emerald-300">{t('refresh') || 'Refresh'}</span>
+            </button>
+            
+            <div className="text-right">
+              <p className="text-xs text-emerald-300/60">{isHindi ? 'अपडेट' : 'Updated'}</p>
+              <p className="text-sm font-medium text-emerald-400">{formatTime(lastUpdate)}</p>
             </div>
-            <BatteryCharging className="w-4 h-4 text-green-500" />
           </div>
         </div>
-      )}
-
-      {/* MOBILE SPACING */}
-      <div className={isMobile ? 'pt-16' : ''}>
-        {/* HEADER - Desktop only */}
-        {!isMobile && (
-          <div className="flex flex-col md:flex-row md:items-center justify-between">
-            <div>
-              <h1 className="text-xl md:text-2xl font-bold text-gray-900">{t('dashboard') || 'Dashboard'}</h1>
-              <div className="flex flex-wrap items-center gap-2 mt-1">
-                <p className="text-sm md:text-base text-gray-600">
-                  {isHindi ? 'रियल-टाइम ट्रेडिंग इनसाइट्स' : 'Real-time trading insights'}
-                </p>
-                {marketStatus.isOpen ? (
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                    <div className="w-1.5 h-1.5 bg-green-500 rounded-full mr-1 animate-pulse"></div>
-                    {t('marketOpen') || 'Market Open'}
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                    <Clock className="w-3 h-3 mr-1" />
-                    {t('marketClosed') || 'Market Closed'}
-                  </span>
-                )}
-              </div>
-            </div>
-            
-            <div className="flex flex-col md:flex-row md:items-center space-y-2 md:space-y-0 md:space-x-3 mt-3 md:mt-0">
-              <button
-                onClick={() => {
-                  refreshStocks();
-                  fetchRealData();
-                }}
-                disabled={loading}
-                className="flex items-center justify-center space-x-2 px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 text-sm md:text-base"
-              >
-                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-                <span>{t('refresh') || 'Refresh'}</span>
-              </button>
-              
-              <div className="text-right">
-                <span className="text-xs md:text-sm text-gray-500">{isHindi ? 'अपडेट' : 'Updated'}</span>
-                <p className="text-xs md:text-sm font-medium">{formatTime(lastUpdate)}</p>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* CONNECTION STATUS */}
-        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-xl p-4 mt-4 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="bg-gradient-to-r from-emerald-900/20 to-cyan-900/10 border border-emerald-900/40 rounded-2xl p-4 mb-6">
+          <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center space-x-3">
-              {isBackendConnected ? (
-                <div className="relative">
-                  <Wifi className="w-5 h-5 text-green-500" />
-                  <div className="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full animate-ping"></div>
-                </div>
-              ) : (
-                <WifiOff className="w-5 h-5 text-red-500" />
-              )}
+              <div className="relative">
+                <div className={`absolute inset-0 rounded-full ${isBackendConnected ? 'bg-emerald-500/30 animate-ping' : 'bg-red-500/30'}`}></div>
+                {isBackendConnected ? (
+                  <Wifi className="w-5 h-5 text-emerald-400" />
+                ) : (
+                  <WifiOff className="w-5 h-5 text-red-400" />
+                )}
+              </div>
               <div>
-                <h3 className="font-medium text-gray-800">
+                <h3 className="font-medium text-white">
                   {isBackendConnected ? 
                     (isHindi ? 'बैकेंड कनेक्टेड' : 'Backend Connected') : 
                     (isHindi ? 'बैकेंड डिस्कनेक्टेड' : 'Backend Disconnected')}
                 </h3>
-                <p className="text-xs text-gray-600">
+                <p className="text-xs text-emerald-300/70">
                   {isHindi ? 'ब्रोकर्स:' : 'Brokers:'} {realBrokers.filter(b => b.status === 'connected').length} {isHindi ? 'कनेक्टेड' : 'Connected'}
                 </p>
               </div>
             </div>
             
             <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-2">
-                {isMobile ? (
-                  <Smartphone className="w-4 h-4 text-blue-500" />
-                ) : (
-                  <Monitor className="w-4 h-4 text-purple-500" />
-                )}
-                <span className="text-xs">{isMobile ? (isHindi ? 'मोबाइल' : 'Mobile') : (isHindi ? 'डेस्कटॉप' : 'Desktop')}</span>
-              </div>
-              <div className="text-xs text-gray-500">
-                v1.0 | {language === 'hi' ? 'हिंदी' : 'English'}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* STATS GRID - Responsive */}
-        <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mt-4">
-          {stats.map((stat, index) => (
-            <div key={index} className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md transition-shadow shadow-sm">
-              <div className="flex items-center justify-between">
-                <div className={`p-2 rounded-lg ${stat.bgColor}`}>
-                  <div className={stat.color}>{stat.icon}</div>
-                </div>
-                <div className="text-right">
-                  <span className={`text-xs font-medium ${stat.color}`}>
-                    {stat.change}
-                  </span>
-                  {stat.trend === 'up' && <ChevronUp className="w-3 h-3 text-green-500 ml-1 inline" />}
-                  {stat.trend === 'down' && <ChevronDown className="w-3 h-3 text-red-500 ml-1 inline" />}
+              <div className={`px-3 py-1.5 rounded-full text-xs font-medium ${
+                marketStatus.isOpen 
+                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
+                  : 'bg-red-500/20 text-red-400 border border-red-500/30'
+              }`}>
+                <div className="flex items-center space-x-1.5">
+                  <div className={`w-1.5 h-1.5 rounded-full ${marketStatus.isOpen ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'}`}></div>
+                  <span>{marketStatus.isOpen ? (isHindi ? 'खुला' : 'OPEN') : (isHindi ? 'बंद' : 'CLOSED')}</span>
                 </div>
               </div>
-              <h3 className="text-lg md:text-xl font-bold mt-2 truncate">{stat.value}</h3>
-              <p className="text-xs md:text-sm text-gray-600 truncate">{stat.title}</p>
-            </div>
-          ))}
-        </div>
-
-        {/* TOP MOVERS - Stack on mobile */}
-        <div className="flex flex-col lg:flex-row gap-4 md:gap-6 mt-4 md:mt-6">
-          {/* TOP GAINERS */}
-          <div className="bg-white rounded-xl border border-gray-200 p-4 md:p-6 flex-1 shadow-sm">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-base md:text-lg font-semibold flex items-center space-x-2">
-                <Zap className="w-4 h-4 md:w-5 md:h-5 text-green-500" />
-                <span>{isHindi ? 'टॉप गेनर्स' : 'Top Gainers'}</span>
-              </h2>
-              <span className="text-xs md:text-sm bg-green-100 text-green-800 px-2 py-1 rounded-full">
-                {isHindi ? 'लाइव' : 'Live'}
-              </span>
-            </div>
-            
-            <div className="space-y-2">
-              {topMovers.gainers.map((stock, index) => (
-                <div key={index} className="flex items-center justify-between p-2 md:p-3 hover:bg-gray-50 rounded-lg">
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-sm md:text-base truncate">{stock.symbol}</p>
-                    <p className="text-xs text-gray-500 truncate">{stock.name || stock.symbol}</p>
-                  </div>
-                  <div className="text-right ml-2">
-                    <p className="font-bold text-sm md:text-base">₹{safeToFixed(stock.currentPrice)}</p>
-                    <p className="text-xs md:text-sm text-green-600 font-medium bg-green-50 px-2 py-1 rounded">
-                      +{safeToFixed(stock.changePercent)}%
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* TOP LOSERS */}
-          <div className="bg-white rounded-xl border border-gray-200 p-4 md:p-6 flex-1 shadow-sm">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-base md:text-lg font-semibold flex items-center space-x-2">
-                <TrendingDown className="w-4 h-4 md:w-5 md:h-5 text-red-500" />
-                <span>{isHindi ? 'टॉप लूज़र्स' : 'Top Losers'}</span>
-              </h2>
-              <span className="text-xs md:text-sm bg-red-100 text-red-800 px-2 py-1 rounded-full">
-                {isHindi ? 'लाइव' : 'Live'}
-              </span>
-            </div>
-            
-            <div className="space-y-2">
-              {topMovers.losers.map((stock, index) => (
-                <div key={index} className="flex items-center justify-between p-2 md:p-3 hover:bg-gray-50 rounded-lg">
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-sm md:text-base truncate">{stock.symbol}</p>
-                    <p className="text-xs text-gray-500 truncate">{stock.name || stock.symbol}</p>
-                  </div>
-                  <div className="text-right ml-2">
-                    <p className="font-bold text-sm md:text-base">₹{safeToFixed(stock.currentPrice)}</p>
-                    <p className="text-xs md:text-sm text-red-600 font-medium bg-red-50 px-2 py-1 rounded">
-                      {safeToFixed(stock.changePercent)}%
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* TABS */}
-        <div className="bg-white rounded-xl border border-gray-200 mt-4 md:mt-6 overflow-hidden shadow-sm">
-          <div className="border-b border-gray-200 overflow-x-auto">
-            <nav className="flex min-w-max md:min-w-0">
-              <button
-                onClick={() => setActiveTab('recommendations')}
-                className={`py-3 px-4 md:py-4 md:px-6 text-sm font-medium border-b-2 whitespace-nowrap flex items-center space-x-2 ${
-                  activeTab === 'recommendations'
-                    ? 'border-blue-500 text-blue-600 bg-blue-50'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-                }`}
-              >
-                <Activity className="w-4 h-4" />
-                <span>{isHindi ? 'AI सिफ़ारिशें' : 'AI Recommendations'}</span>
-              </button>
-              <button
-                onClick={() => setActiveTab('active')}
-                className={`py-3 px-4 md:py-4 md:px-6 text-sm font-medium border-b-2 whitespace-nowrap flex items-center space-x-2 ${
-                  activeTab === 'active'
-                    ? 'border-blue-500 text-blue-600 bg-blue-50'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-                }`}
-              >
-                <TrendingUp className="w-4 h-4" />
-                <span>{isHindi ? 'एक्टिव ट्रेड्स' : 'Active Trades'} ({realPortfolio.activeTrades})</span>
-              </button>
-              <button
-                onClick={() => setActiveTab('watchlist')}
-                className={`py-3 px-4 md:py-4 md:px-6 text-sm font-medium border-b-2 whitespace-nowrap flex items-center space-x-2 ${
-                  activeTab === 'watchlist'
-                    ? 'border-blue-500 text-blue-600 bg-blue-50'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-                }`}
-              >
-                <Clock className="w-4 h-4" />
-                <span>{isHindi ? 'वॉचलिस्ट' : 'Watchlist'}</span>
-              </button>
-            </nav>
-          </div>
-
-          {/* TAB CONTENT */}
-          <div className="p-4 md:p-6">
-            {activeTab === 'recommendations' && (
-              <div>
-                {/* FILTERS */}
-                <div className="mb-6">
-                  <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-2">
-                    <h2 className="text-base md:text-lg font-semibold flex items-center space-x-2">
-                      <Filter className="w-4 h-4 md:w-5 md:h-5" />
-                      <span>{isHindi ? 'AI स्टॉक सिफ़ारिशें' : 'AI Stock Recommendations'}</span>
-                    </h2>
-                    <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
-                      {filteredStocks.length} {isHindi ? 'स्टॉक्स मिले' : 'stocks found'}
-                    </span>
-                  </div>
-                  
-                  <div className="flex flex-col md:flex-row md:flex-wrap gap-3">
-                    <div className="w-full md:w-auto">
-                      <label className="block text-xs text-gray-500 mb-1">{isHindi ? 'सिग्नल:' : 'Signal:'}</label>
-                      <select
-                        value={filters.signal}
-                        onChange={(e) => setFilters({ ...filters, signal: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                      >
-                        <option value="all">{isHindi ? 'सभी सिग्नल' : 'All Signals'}</option>
-                        <option value="strong_buy">{isHindi ? 'स्ट्रॉन्ग बाय' : 'Strong Buy'}</option>
-                        <option value="buy">{isHindi ? 'बाय' : 'Buy'}</option>
-                        <option value="neutral">{isHindi ? 'न्यूट्रल' : 'Neutral'}</option>
-                      </select>
-                    </div>
-
-                    <div className="w-full md:w-auto">
-                      <label className="block text-xs text-gray-500 mb-1">{isHindi ? 'रिस्क:' : 'Risk:'}</label>
-                      <select
-                        value={filters.risk}
-                        onChange={(e) => setFilters({ ...filters, risk: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                      >
-                        <option value="all">{isHindi ? 'सभी रिस्क' : 'All Risk'}</option>
-                        <option value="low">{isHindi ? 'कम रिस्क' : 'Low Risk'}</option>
-                        <option value="medium">{isHindi ? 'मध्यम रिस्क' : 'Medium Risk'}</option>
-                        <option value="high">{isHindi ? 'उच्च रिस्क' : 'High Risk'}</option>
-                      </select>
-                    </div>
-
-                    <div className="w-full md:w-auto">
-                      <label className="block text-xs text-gray-500 mb-1">{isHindi ? 'टाइमफ्रेम:' : 'Timeframe:'}</label>
-                      <select
-                        value={filters.timeFrame}
-                        onChange={(e) => setFilters({ ...filters, timeFrame: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                      >
-                        <option value="all">{isHindi ? 'सभी टाइमफ्रेम' : 'All Timeframes'}</option>
-                        <option value="intraday">{isHindi ? 'इंट्राडे' : 'Intraday'}</option>
-                        <option value="swing">{isHindi ? 'स्विंग' : 'Swing'}</option>
-                        <option value="positional">{isHindi ? 'पोजिशनल' : 'Positional'}</option>
-                      </select>
-                    </div>
-
-                    <div className="w-full md:w-auto flex items-end">
-                      <button
-                        onClick={() => setFilters({ signal: 'all', risk: 'all', timeFrame: 'all' })}
-                        className="w-full md:w-auto px-4 py-2 text-sm text-gray-600 hover:text-gray-800 border border-gray-300 rounded-lg hover:bg-gray-50"
-                      >
-                        {isHindi ? 'फ़िल्टर्स हटाएँ' : 'Clear Filters'}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* STOCK CARDS */}
-                {loading ? (
-                  <div className="p-8 md:p-12 text-center">
-                    <div className="animate-spin rounded-full h-10 w-10 md:h-12 md:w-12 border-b-2 border-blue-600 mx-auto"></div>
-                    <p className="mt-4 text-gray-600">
-                      {isHindi ? 'AI सिफ़ारिशें लोड हो रही हैं...' : 'Loading AI recommendations...'}
-                    </p>
-                    <p className="text-xs md:text-sm text-gray-500">
-                      {isHindi ? 'मार्केट डेटा एनालाइज़ हो रहा है' : 'Analyzing market data'}
-                    </p>
-                  </div>
-                ) : (
-                  <div>
-                    {filteredStocks.length > 0 ? (
-                      <div className={`grid ${isMobile ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'} gap-4 md:gap-6`}>
-                        {filteredStocks.map((stock) => (
-                          <StockCard
-                            key={stock.symbol}
-                            stock={stock}
-                            onTrade={handleTrade}
-                            isMobile={isMobile}
-                            connectionStatus={connectionStatus}
-                            isHindi={isHindi}
-                          />
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-center py-8 md:py-12">
-                        <Shield className="w-10 h-10 md:w-12 md:h-12 text-gray-400 mx-auto mb-4" />
-                        <p className="text-gray-500">
-                          {isHindi ? 'कोई स्टॉक फ़िल्टर्स से मैच नहीं करता' : 'No stocks match your filters'}
-                        </p>
-                        <p className="text-xs md:text-sm text-gray-400 mt-1">
-                          {isHindi ? 'फ़िल्टर्स बदलकर देखें' : 'Try changing your filters'}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                )}
+              
+              <div className="text-xs text-emerald-300/50">
+                v3.0 • {language === 'hi' ? 'हिंदी' : 'English'}
               </div>
-            )}
-
-            {activeTab === 'active' && (
-              <div>
-                <h2 className="text-base md:text-lg font-semibold mb-4 flex items-center space-x-2">
-                  <TrendingUp className="w-5 h-5" />
-                  <span>{isHindi ? 'एक्टिव ट्रेड्स' : 'Active Trades'}</span>
-                </h2>
-                {realPortfolio.activeTrades > 0 && realTrades.length > 0 ? (
-                  <div className="overflow-x-auto rounded-lg border border-gray-200">
-                    <table className="w-full min-w-max">
-                      <thead>
-                        <tr className="bg-gray-50">
-                          <th className="py-3 px-4 text-left text-xs md:text-sm font-medium text-gray-700">
-                            {isHindi ? 'स्टॉक' : 'Stock'}
-                          </th>
-                          <th className="py-3 px-4 text-left text-xs md:text-sm font-medium text-gray-700">
-                            {isHindi ? 'एंट्री' : 'Entry'}
-                          </th>
-                          <th className="py-3 px-4 text-left text-xs md:text-sm font-medium text-gray-700">
-                            {isHindi ? 'करंट' : 'Current'}
-                          </th>
-                          <th className="py-3 px-4 text-left text-xs md:text-sm font-medium text-gray-700">
-                            P&L
-                          </th>
-                          <th className="py-3 px-4 text-left text-xs md:text-sm font-medium text-gray-700">
-                            {isHindi ? 'एक्शन' : 'Action'}
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200">
-                        {realTrades.filter(t => t.status === 'open').map((trade, index) => (
-                          <tr key={index} className="hover:bg-gray-50">
-                            <td className="py-3 px-4">
-                              <p className="font-medium text-sm">{trade.symbol}</p>
-                              <p className="text-xs text-gray-500">{trade.action}</p>
-                            </td>
-                            <td className="py-3 px-4">
-                              <p className="text-sm">₹{safeToFixed(trade.entryPrice)}</p>
-                            </td>
-                            <td className="py-3 px-4">
-                              <p className="text-sm">₹{safeToFixed(trade.currentPrice || trade.entryPrice)}</p>
-                            </td>
-                            <td className="py-3 px-4">
-                              <p className={`text-sm font-medium px-2 py-1 rounded-full inline-block ${
-                                (trade.pnl || 0) >= 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                              }`}>
-                                ₹{safeToFixed(trade.pnl)}
-                              </p>
-                            </td>
-                            <td className="py-3 px-4">
-                              <button
-                                onClick={() => setExitPopupData(trade)}
-                                className="px-3 py-1 bg-red-600 text-white rounded-lg text-xs hover:bg-red-700 font-medium"
-                              >
-                                {isHindi ? 'एक्ज़िट' : 'Exit'}
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <div className="text-center py-8 md:py-12">
-                    <BarChart3 className="w-10 h-10 md:w-12 md:h-12 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-500">
-                      {isHindi ? 'कोई एक्टिव ट्रेड नहीं' : 'No active trades'}
-                    </p>
-                    <p className="text-xs md:text-sm text-gray-400 mt-1">
-                      {isHindi ? 'ऊपर सिफ़ारिशों से ट्रेड शुरू करें' : 'Start trading from recommendations above'}
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {activeTab === 'watchlist' && (
-              <div>
-                <h2 className="text-base md:text-lg font-semibold mb-4 flex items-center space-x-2">
-                  <Clock className="w-5 h-5" />
-                  <span>{isHindi ? 'आपकी वॉचलिस्ट' : 'Your Watchlist'}</span>
-                </h2>
-                <div className="text-center py-8 md:py-12">
-                  <Clock className="w-10 h-10 md:w-12 md:h-12 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-500">
-                    {isHindi ? 'वॉचलिस्ट फीचर जल्द ही आ रहा है' : 'Watchlist feature coming soon'}
-                  </p>
-                  <p className="text-xs md:text-sm text-gray-400 mt-1">
-                    {isHindi ? 'स्टॉक्स वॉचलिस्ट में जोड़ें' : 'Add stocks to your watchlist'}
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* MARKET INSIGHTS */}
-        <div className="bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-100 rounded-xl p-4 md:p-6 mt-4 md:mt-6 shadow-sm">
-          <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-2">
-            <h2 className="text-base md:text-lg font-semibold flex items-center space-x-2">
-              <Activity className="w-4 h-4 md:w-5 md:h-5" />
-              <span>{isHindi ? 'मार्केट इनसाइट्स' : 'Market Insights'}</span>
-            </h2>
-            <span className="text-xs md:text-sm text-blue-600 bg-blue-100 px-3 py-1 rounded-full">
-              {isHindi ? 'रियल-टाइम' : 'Real-time'}
-            </span>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-white rounded-lg p-4 shadow-sm">
-              <p className="text-xs md:text-sm text-gray-500 mb-2">
-                {isHindi ? 'मार्केट सेन्टीमेंट' : 'Market Sentiment'}
-              </p>
-              <div className="flex items-center space-x-3">
-                <div className="h-2 flex-1 bg-gray-200 rounded-full overflow-hidden">
-                  <div className="h-full bg-green-500" style={{ width: '65%' }}></div>
-                </div>
-                <span className="text-xs md:text-sm font-medium text-green-600 bg-green-50 px-2 py-1 rounded">
-                  {isHindi ? 'बुलिश' : 'Bullish'}
-                </span>
-              </div>
-            </div>
-            
-            <div className="bg-white rounded-lg p-4 shadow-sm">
-              <p className="text-xs md:text-sm text-gray-500 mb-2">
-                {isHindi ? 'वोलैटिलिटी इंडेक्स' : 'Volatility Index'}
-              </p>
-              <p className="text-lg md:text-xl font-bold">18.4</p>
-              <p className="text-xs text-gray-500 bg-gray-100 inline-block px-2 py-1 rounded">
-                {isHindi ? 'मध्यम रिस्क' : 'Medium Risk'}
-              </p>
-            </div>
-            
-            <div className="bg-white rounded-lg p-4 shadow-sm">
-              <p className="text-xs md:text-sm text-gray-500 mb-2">
-                {isHindi ? 'AI कॉन्फिडेंस' : 'AI Confidence'}
-              </p>
-              <p className="text-lg md:text-xl font-bold">85.6%</p>
-              <p className="text-xs text-gray-500 bg-blue-50 text-blue-600 inline-block px-2 py-1 rounded">
-                {isHindi ? 'उच्च एक्यूरेसी' : 'High Accuracy'}
-              </p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* POPUPS */}
-      {popupData && (
-        <EntryPopup
-          data={popupData}
-          onClose={() => setPopupData(null)}
-          onConfirm={handleTrade}
-          isMobile={isMobile}
-          isHindi={isHindi}
-        />
-      )}
+      {/* STATS GRID - Responsive */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 md:mb-8">
+        {stats.map((stat, index) => (
+          <div 
+            key={index} 
+            className={`bg-gradient-to-br from-slate-800/50 to-slate-900/30 rounded-2xl p-4 border ${stat.borderColor} hover:border-${stat.color.split('-')[1]}-500/50 transition-all group`}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <div className={`p-2.5 rounded-xl ${stat.bgColor}`}>
+                <div className={stat.color}>{stat.icon}</div>
+              </div>
+              <div className="flex items-center space-x-1">
+                <span className={`text-xs font-medium px-2 py-1 rounded-full ${stat.bgColor} ${stat.color}`}>
+                  {stat.change}
+                </span>
+                {stat.trend === 'up' && <ChevronUp className="w-3.5 h-3.5 text-emerald-400" />}
+                {stat.trend === 'down' && <ChevronDown className="w-3.5 h-3.5 text-red-400" />}
+              </div>
+            </div>
+            <h3 className="text-xl md:text-2xl font-bold text-white mb-1">{stat.value}</h3>
+            <p className="text-sm text-emerald-300/70">{stat.title}</p>
+          </div>
+        ))}
+      </div>
 
-      {exitPopupData && (
-        <ExitPopup
-          trade={exitPopupData}
-          onClose={() => setExitPopupData(null)}
-          onExit={handleTrade}
-          onAdjust={handleAutoAdjust}
-          isMobile={isMobile}
-          isHindi={isHindi}
-        />
-      )}
+      {/* TOP MOVERS SECTION */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        {/* TOP GAINERS */}
+        <div className="bg-gradient-to-br from-slate-800/40 to-slate-900/30 rounded-2xl border border-emerald-900/40 p-5">
+          <div className="flex items-center justify-between mb-5">
+            <div className="flex items-center space-x-2">
+              <div className="p-2 rounded-xl bg-emerald-500/20">
+                <TrendUp className="w-5 h-5 text-emerald-400" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-white">{isHindi ? 'टॉप गेनर्स' : 'Top Gainers'}</h2>
+                <p className="text-xs text-emerald-300/60">{isHindi ? 'लाइव अपडेट्स' : 'Live updates'}</p>
+              </div>
+            </div>
+            <span className="px-3 py-1 bg-emerald-500/20 text-emerald-400 text-xs rounded-full border border-emerald-500/30">
+              {isHindi ? 'लाइव' : 'LIVE'}
+            </span>
+          </div>
+          
+          <div className="space-y-3">
+            {topMovers.gainers.map((stock, index) => (
+              <div 
+                key={index} 
+                className="flex items-center justify-between p-3 rounded-xl bg-gradient-to-r from-emerald-900/10 to-emerald-800/5 border border-emerald-900/30 hover:border-emerald-500/40 transition-all"
+              >
+                <div className="flex items-center space-x-3">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                    index === 0 ? 'bg-yellow-500/20' : 
+                    index === 1 ? 'bg-slate-500/20' : 
+                    'bg-amber-500/20'
+                  }`}>
+                    <span className={`text-sm font-bold ${
+                      index === 0 ? 'text-yellow-400' : 
+                      index === 1 ? 'text-slate-400' : 
+                      'text-amber-400'
+                    }`}>
+                      #{index + 1}
+                    </span>
+                  </div>
+                  <div>
+                    <p className="font-medium text-white">{stock.symbol}</p>
+                    <p className="text-xs text-emerald-300/60">{stock.name || stock.symbol}</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="font-bold text-white">₹{safeToFixed(stock.currentPrice)}</p>
+                  <p className="text-sm text-emerald-400 font-medium">
+                    +{safeToFixed(stock.changePercent)}%
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* TOP LOSERS */}
+        <div className="bg-gradient-to-br from-slate-800/40 to-slate-900/30 rounded-2xl border border-red-900/40 p-5">
+          <div className="flex items-center justify-between mb-5">
+            <div className="flex items-center space-x-2">
+              <div className="p-2 rounded-xl bg-red-500/20">
+                <TrendDown className="w-5 h-5 text-red-400" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-white">{isHindi ? 'टॉप लूज़र्स' : 'Top Losers'}</h2>
+                <p className="text-xs text-red-300/60">{isHindi ? 'लाइव अपडेट्स' : 'Live updates'}</p>
+              </div>
+            </div>
+            <span className="px-3 py-1 bg-red-500/20 text-red-400 text-xs rounded-full border border-red-500/30">
+              {isHindi ? 'लाइव' : 'LIVE'}
+            </span>
+          </div>
+          
+          <div className="space-y-3">
+            {topMovers.losers.map((stock, index) => (
+              <div 
+                key={index} 
+                className="flex items-center justify-between p-3 rounded-xl bg-gradient-to-r from-red-900/10 to-red-800/5 border border-red-900/30 hover:border-red-500/40 transition-all"
+              >
+                <div className="flex items-center space-x-3">
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center bg-slate-500/20">
+                    <span className="text-sm font-bold text-slate-400">#{index + 1}</span>
+                  </div>
+                  <div>
+                    <p className="font-medium text-white">{stock.symbol}</p>
+                    <p className="text-xs text-red-300/60">{stock.name || stock.symbol}</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="font-bold text-white">₹{safeToFixed(stock.currentPrice)}</p>
+                  <p className="text-sm text-red-400 font-medium">
+                    {safeToFixed(stock.changePercent)}%
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* MAIN CONTENT TABS */}
+      <div className="bg-gradient-to-br from-slate-800/40 to-slate-900/30 rounded-2xl border border-emerald-900/40 overflow-hidden mb-8">
+        {/* TABS HEADER */}
+        <div className="border-b border-emerald-900/40 overflow-x-auto">
+          <div className="flex min-w-max md:min-w-0">
+            <button
+              onClick={() => setActiveTab('recommendations')}
+              className={`flex items-center space-x-2 px-6 py-4 text-sm font-medium whitespace-nowrap transition-all ${
+                activeTab === 'recommendations'
+                  ? 'text-white bg-gradient-to-r from-emerald-600/30 to-cyan-600/30 border-b-2 border-emerald-400'
+                  : 'text-emerald-300/70 hover:text-white hover:bg-emerald-900/20'
+              }`}
+            >
+              <Activity className="w-4 h-4" />
+              <span>{isHindi ? 'AI सिफ़ारिशें' : 'AI Recommendations'}</span>
+              <span className="ml-2 px-2 py-0.5 bg-emerald-500/20 text-emerald-400 text-xs rounded-full">
+                {filteredStocks.length}
+              </span>
+            </button>
+            
+            <button
+              onClick={() => setActiveTab('active')}
+              className={`flex items-center space-x-2 px-6 py-4 text-sm font-medium whitespace-nowrap transition-all ${
+                activeTab === 'active'
+                  ? 'text-white bg-gradient-to-r from-emerald-600/30 to-cyan-600/30 border-b-2 border-emerald-400'
+                  : 'text-emerald-300/70 hover:text-white hover:bg-emerald-900/20'
+              }`}
+            >
+              <TrendingUp className="w-4 h-4" />
+              <span>{isHindi ? 'एक्टिव ट्रेड्स' : 'Active Trades'}</span>
+              <span className="ml-2 px-2 py-0.5 bg-purple-500/20 text-purple-400 text-xs rounded-full">
+                {realPortfolio.activeTrades}
+              </span>
+            </button>
+            
+            <button
+              onClick={() => setActiveTab('watchlist')}
+              className={`flex items-center space-x-2 px-6 py-4 text-sm font-medium whitespace-nowrap transition-all ${
+                activeTab === 'watchlist'
+                  ? 'text-white bg-gradient-to-r from-emerald-600/30 to-cyan-600/30 border-b-2 border-emerald-400'
+                  : 'text-emerald-300/70 hover:text-white hover:bg-emerald-900/20'
+              }`}
+            >
+              <Clock className="w-4 h-4" />
+              <span>{isHindi ? 'वॉचलिस्ट' : 'Watchlist'}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* TAB CONTENT */}
+        <div className="p-5 md:p-6">
+          {/* RECOMMENDATIONS TAB */}
+          {activeTab === 'recommendations' && (
+            <div>
+              {/* FILTERS SECTION */}
+              <div className="mb-6">
+                <div className="flex flex-col md:flex-row md:items-center justify-between mb-4">
+                  <div className="flex items-center space-x-2 mb-3 md:mb-0">
+                    <Filter className="w-5 h-5 text-emerald-400" />
+                    <h3 className="text-lg font-bold text-white">{isHindi ? 'AI स्टॉक सिफ़ारिशें' : 'AI Stock Recommendations'}</h3>
+                  </div>
+                  <p className="text-sm text-emerald-300/70">
+                    {filteredStocks.length} {isHindi ? 'स्टॉक्स मिले' : 'stocks found'} • {isHindi ? '90%+ एक्यूरेसी' : '90%+ accuracy'}
+                  </p>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                  <div>
+                    <label className="block text-xs text-emerald-300/70 mb-2">{isHindi ? 'सिग्नल:' : 'Signal:'}</label>
+                    <select
+                      value={filters.signal}
+                      onChange={(e) => setFilters({ ...filters, signal: e.target.value })}
+                      className="w-full px-3 py-2 bg-slate-800/50 border border-emerald-900/40 rounded-lg text-white text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none"
+                    >
+                      <option value="all" className="bg-slate-900">{isHindi ? 'सभी सिग्नल' : 'All Signals'}</option>
+                      <option value="strong_buy" className="bg-slate-900">{isHindi ? 'स्ट्रॉन्ग बाय' : 'Strong Buy'}</option>
+                      <option value="buy" className="bg-slate-900">{isHindi ? 'बाय' : 'Buy'}</option>
+                      <option value="neutral" className="bg-slate-900">{isHindi ? 'न्यूट्रल' : 'Neutral'}</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-emerald-300/70 mb-2">{isHindi ? 'रिस्क:' : 'Risk:'}</label>
+                    <select
+                      value={filters.risk}
+                      onChange={(e) => setFilters({ ...filters, risk: e.target.value })}
+                      className="w-full px-3 py-2 bg-slate-800/50 border border-emerald-900/40 rounded-lg text-white text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none"
+                    >
+                      <option value="all" className="bg-slate-900">{isHindi ? 'सभी रिस्क' : 'All Risk'}</option>
+                      <option value="low" className="bg-slate-900">{isHindi ? 'कम रिस्क' : 'Low Risk'}</option>
+                      <option value="medium" className="bg-slate-900">{isHindi ? 'मध्यम रिस्क' : 'Medium Risk'}</option>
+                      <option value="high" className="bg-slate-900">{isHindi ? 'उच्च रिस्क' : 'High Risk'}</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-emerald-300/70 mb-2">{isHindi ? 'टाइमफ्रेम:' : 'Timeframe:'}</label>
+                    <select
+                      value={filters.timeFrame}
+                      onChange={(e) => setFilters({ ...filters, timeFrame: e.target.value })}
+                      className="w-full px-3 py-2 bg-slate-800/50 border border-emerald-900/40 rounded-lg text-white text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none"
+                    >
+                      <option value="all" className="bg-slate-900">{isHindi ? 'सभी टाइमफ्रेम' : 'All Timeframes'}</option>
+                      <option value="intraday" className="bg-slate-900">{isHindi ? 'इंट्राडे' : 'Intraday'}</option>
+                      <option value="swing" className="bg-slate-900">{isHindi ? 'स्विंग' : 'Swing'}</option>
+                      <option value="positional" className="bg-slate-900">{isHindi ? 'पोजिशनल' : 'Positional'}</option>
+                    </select>
+                  </div>
+
+                  <div className="flex items-end">
+                    <button
+                      onClick={() => setFilters({ signal: 'all', risk: 'all', timeFrame: 'all' })}
+                      className="w-full px-4 py-2 bg-gradient-to-r from-slate-800 to-slate-900 border border-emerald-900/40 text-emerald-300 rounded-lg hover:border-emerald-500/60 transition-all text-sm"
+                    >
+                      {isHindi ? 'फ़िल्टर्स हटाएँ' : 'Clear Filters'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* STOCK CARDS */}
+              {loading ? (
+                <div className="py-12 text-center">
+                  <div className="inline-flex items-center justify-center p-4 rounded-2xl bg-gradient-to-r from-emerald-900/20 to-cyan-900/20">
+                    <RefreshCw className="w-8 h-8 text-emerald-400 animate-spin" />
+                  </div>
+                  <p className="mt-4 text-emerald-300">
+                    {isHindi ? 'AI सिफ़ारिशें लोड हो रही हैं...' : 'Loading AI recommendations...'}
+                  </p>
+                  <p className="text-sm text-emerald-300/60 mt-1">
+                    {isHindi ? 'मार्केट डेटा एनालाइज़ हो रहा है' : 'Analyzing market data'}
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  {filteredStocks.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {filteredStocks.map((stock) => (
+                        <StockCard
+                          key={stock.symbol}
+                          stock={stock}
+                          onTrade={handleTrade}
+                          connectionStatus={connectionStatus}
+                          isHindi={isHindi}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-12">
+                      <Shield className="w-12 h-12 text-emerald-400/40 mx-auto mb-4" />
+                      <p className="text-emerald-300/70">
+                        {isHindi ? 'कोई स्टॉक फ़िल्टर्स से मैच नहीं करता' : 'No stocks match your filters'}
+                      </p>
+                      <p className="text-sm text-emerald-300/50 mt-1">
+                        {isHindi ? 'फ़िल्टर्स बदलकर देखें' : 'Try changing your filters'}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ACTIVE TRADES TAB */}
+          {activeTab === 'active' && (
+            <div>
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center space-x-2">
+                  <TrendingUp className="w-5 h-5 text-emerald-400" />
+                  <h3 className="text-lg font-bold text-white">{isHindi ? 'एक्टिव ट्रेड्स' : 'Active Trades'}</h3>
+                </div>
+                <span className="px-3 py-1 bg-gradient-to-r from-emerald-600/20 to-cyan-600/20 text-emerald-400 text-sm rounded-full border border-emerald-500/30">
+                  {realPortfolio.activeTrades} {isHindi ? 'ट्रेड्स' : 'trades'}
+                </span>
+              </div>
+              
+              {realPortfolio.activeTrades > 0 && realTrades.length > 0 ? (
+                <div className="overflow-x-auto rounded-xl border border-emerald-900/40">
+                  <table className="w-full min-w-max">
+                    <thead>
+                      <tr className="bg-gradient-to-r from-emerald-900/20 to-cyan-900/10">
+                        <th className="py-3 px-4 text-left text-sm font-medium text-emerald-400">
+                          {isHindi ? 'स्टॉक' : 'Stock'}
+                        </th>
+                        <th className="py-3 px-4 text-left text-sm font-medium text-emerald-400">
+                          {isHindi ? 'एंट्री' : 'Entry'}
+                        </th>
+                        <th className="py-3 px-4 text-left text-sm font-medium text-emerald-400">
+                          {isHindi ? 'करंट' : 'Current'}
+                        </th>
+                        <th className="py-3 px-4 text-left text-sm font-medium text-emerald-400">
+                          P&L
+                        </th>
+                        <th className="py-3 px-4 text-left text-sm font-medium text-emerald-400">
+                          {isHindi ? 'एक्शन' : 'Action'}
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-emerald-900/20">
+                      {realTrades.filter(t => t.status === 'open').map((trade, index) => (
+                        <tr key={index} className="hover:bg-emerald-900/10">
+                          <td className="py-3 px-4">
+                            <div className="font-medium text-white">{trade.symbol}</div>
+                            <div className="text-xs text-emerald-300/60">{trade.action}</div>
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="text-white">₹{safeToFixed(trade.entryPrice)}</div>
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="text-white">₹{safeToFixed(trade.currentPrice || trade.entryPrice)}</div>
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className={`px-3 py-1.5 rounded-full text-sm font-medium inline-block ${
+                              (trade.pnl || 0) >= 0 
+                                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
+                                : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                            }`}>
+                              ₹{safeToFixed(trade.pnl)}
+                            </div>
+                          </td>
+                          <td className="py-3 px-4">
+                            <button
+                              onClick={() => setExitPopupData(trade)}
+                              className="px-4 py-1.5 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-lg text-sm hover:from-red-700 hover:to-red-800 font-medium transition-all"
+                            >
+                              {isHindi ? 'एक्ज़िट' : 'Exit'}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <BarChart3 className="w-12 h-12 text-emerald-400/40 mx-auto mb-4" />
+                  <p className="text-emerald-300/70">
+                    {isHindi ? 'कोई एक्टिव ट्रेड नहीं' : 'No active trades'}
+                  </p>
+                  <p className="text-sm text-emerald-300/50 mt-1">
+                    {isHindi ? 'ऊपर सिफ़ारिशों से ट्रेड शुरू करें' : 'Start trading from recommendations above'}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* WATCHLIST TAB */}
+          {activeTab === 'watchlist' && (
+            <div>
+              <div className="text-center py-12">
+                <Clock className="w-12 h-12 text-emerald-400/40 mx-auto mb-4" />
+                <p className="text-emerald-300/70">
+                  {isHindi ? 'वॉचलिस्ट फीचर जल्द ही आ रहा है' : 'Watchlist feature coming soon'}
+                </p>
+                <p className="text-sm text-emerald-300/50 mt-1">
+                  {isHindi ? 'स्टॉक्स वॉचलिस्ट में जोड़ें' : 'Add stocks to your watchlist'}
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* MARKET INSIGHTS */}
+      <div className="bg-gradient-to-r from-emerald-900/20 to-cyan-900/10 border border-emerald-900/40 rounded-2xl p-5">
+        <div className="flex flex-col md:flex-row md:items-center justify-between mb-5">
+          <div className="flex items-center space-x-2 mb-3 md:mb-0">
+            <LineChart className="w-5 h-5 text-emerald-400" />
+            <h3 className="text-lg font-bold text-white">{isHindi ? 'मार्केट इनसाइट्स' : 'Market Insights'}</h3>
+          </div>
+          <span className="px-3 py-1 bg-gradient-to-r from-emerald-600/20 to-cyan-600/20 text-emerald-400 text-xs rounded-full border border-emerald-500/30">
+            {isHindi ? 'रियल-टाइम' : 'Real-time'}
+          </span>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-gradient-to-br from-slate-800/40 to-slate-900/30 rounded-xl p-4 border border-emerald-900/40">
+            <p className="text-sm text-emerald-300/70 mb-3">
+              {isHindi ? 'मार्केट सेन्टीमेंट' : 'Market Sentiment'}
+            </p>
+            <div className="space-y-3">
+              <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
+                <div className="h-full bg-gradient-to-r from-emerald-500 to-cyan-500" style={{ width: '65%' }}></div>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-xs text-emerald-300/60">Bearish</span>
+                <span className="text-xs text-emerald-300/60">Neutral</span>
+                <span className="text-xs font-medium text-emerald-400">Bullish</span>
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-gradient-to-br from-slate-800/40 to-slate-900/30 rounded-xl p-4 border border-emerald-900/40">
+            <p className="text-sm text-emerald-300/70 mb-3">
+              {isHindi ? 'वोलैटिलिटी इंडेक्स' : 'Volatility Index'}
+            </p>
+            <div className="flex items-end justify-between">
+              <div>
+                <p className="text-2xl font-bold text-white">18.4</p>
+                <p className="text-xs text-emerald-300/60 mt-1">
+                  {isHindi ? 'पिछले दिन से -0.5' : '-0.5 from yesterday'}
+                </p>
+              </div>
+              <span className="px-3 py-1 bg-amber-500/20 text-amber-400 text-xs rounded-full border border-amber-500/30">
+                {isHindi ? 'मध्यम रिस्क' : 'Medium Risk'}
+              </span>
+            </div>
+          </div>
+          
+          <div className="bg-gradient-to-br from-slate-800/40 to-slate-900/30 rounded-xl p-4 border border-emerald-900/40">
+            <p className="text-sm text-emerald-300/70 mb-3">
+              {isHindi ? 'AI कॉन्फिडेंस' : 'AI Confidence'}
+            </p>
+            <div className="flex items-end justify-between">
+              <div>
+                <p className="text-2xl font-bold text-white">85.6%</p>
+                <p className="text-xs text-emerald-300/60 mt-1">
+                  {isHindi ? 'औसत से +2.4%' : '+2.4% above average'}
+                </p>
+              </div>
+              <span className="px-3 py-1 bg-emerald-500/20 text-emerald-400 text-xs rounded-full border border-emerald-500/30">
+                {isHindi ? 'उच्च एक्यूरेसी' : 'High Accuracy'}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
