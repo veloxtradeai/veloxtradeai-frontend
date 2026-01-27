@@ -22,7 +22,11 @@ import {
   Monitor,
   Wifi,
   WifiOff,
-  BatteryCharging
+  BatteryCharging,
+  Menu,
+  X,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 
 const Dashboard = () => {
@@ -57,6 +61,9 @@ const Dashboard = () => {
     websocket: false,
     api: false
   });
+
+  // MOBILE SIDEBAR STATE
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   // SAFE number formatter
   const safeToFixed = (value, decimals = 2) => {
@@ -133,12 +140,17 @@ const Dashboard = () => {
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
     const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768);
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      // Close sidebar if switching to desktop
+      if (!mobile && mobileSidebarOpen) {
+        setMobileSidebarOpen(false);
+      }
     };
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
-  }, []);
+  }, [mobileSidebarOpen]);
 
   // AUTO POPUP FOR HIGH CONFIDENCE STOCKS
   useEffect(() => {
@@ -279,72 +291,183 @@ const Dashboard = () => {
     });
   };
 
+  // MOBILE NAVIGATION COMPONENT
+  const MobileNavigation = () => (
+    <div className="bg-white shadow-lg rounded-lg mb-4 p-3">
+      <div className="flex justify-between items-center mb-3">
+        <button
+          onClick={() => setMobileSidebarOpen(true)}
+          className="p-2 rounded-lg bg-blue-50 text-blue-600"
+        >
+          <Menu className="w-5 h-5" />
+        </button>
+        <div className="flex items-center space-x-3">
+          <button
+            onClick={() => {
+              refreshStocks();
+              fetchRealData();
+            }}
+            className="p-2 rounded-lg bg-gray-100"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+          <div className="text-right">
+            <p className="text-xs text-gray-500">{formatTime(lastUpdate)}</p>
+          </div>
+        </div>
+      </div>
+      
+      <div className="flex overflow-x-auto space-x-2 pb-1">
+        <button
+          onClick={() => window.location.href = '/dashboard'}
+          className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium whitespace-nowrap"
+        >
+          {isHindi ? 'डैशबोर्ड' : 'Dashboard'}
+        </button>
+        <button
+          onClick={() => window.location.href = '/analytics'}
+          className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium whitespace-nowrap"
+        >
+          {isHindi ? 'एनालिटिक्स' : 'Analytics'}
+        </button>
+        <button
+          onClick={() => window.location.href = '/broker'}
+          className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium whitespace-nowrap"
+        >
+          {isHindi ? 'ब्रोकर' : 'Broker'}
+        </button>
+        <button
+          onClick={() => window.location.href = '/subscription'}
+          className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium whitespace-nowrap"
+        >
+          {isHindi ? 'सब्सक्रिप्शन' : 'Subscription'}
+        </button>
+      </div>
+    </div>
+  );
+
+  // MOBILE SIDEBAR MODAL
+  const MobileSidebar = () => (
+    <div className={`fixed inset-0 z-50 ${mobileSidebarOpen ? 'block' : 'hidden'}`}>
+      <div className="absolute inset-0 bg-black bg-opacity-50" onClick={() => setMobileSidebarOpen(false)}></div>
+      <div className="absolute left-0 top-0 h-full w-64 bg-white shadow-xl">
+        <div className="p-4 border-b">
+          <div className="flex justify-between items-center">
+            <h2 className="text-lg font-bold text-gray-800">VeloxTradeAI</h2>
+            <button onClick={() => setMobileSidebarOpen(false)} className="p-2">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          <p className="text-sm text-gray-500 mt-1">Premium Member</p>
+        </div>
+        
+        <div className="p-2">
+          <a href="/dashboard" className="flex items-center space-x-3 p-3 rounded-lg bg-blue-50 text-blue-600 mb-1">
+            <Activity className="w-5 h-5" />
+            <span>{isHindi ? 'डैशबोर्ड' : 'Dashboard'}</span>
+          </a>
+          <a href="/analytics" className="flex items-center space-x-3 p-3 rounded-lg text-gray-700 hover:bg-gray-100 mb-1">
+            <BarChart3 className="w-5 h-5" />
+            <span>{isHindi ? 'एनालिटिक्स' : 'Analytics'}</span>
+          </a>
+          <a href="/broker" className="flex items-center space-x-3 p-3 rounded-lg text-gray-700 hover:bg-gray-100 mb-1">
+            <TrendingUp className="w-5 h-5" />
+            <span>{isHindi ? 'ब्रोकर सेटिंग' : 'Broker Settings'}</span>
+          </a>
+          <a href="/subscription" className="flex items-center space-x-3 p-3 rounded-lg text-gray-700 hover:bg-gray-100 mb-1">
+            <Shield className="w-5 h-5" />
+            <span>{isHindi ? 'सब्सक्रिप्शन' : 'Subscription'}</span>
+          </a>
+          
+          <div className="mt-4 pt-4 border-t">
+            <button className="w-full flex items-center justify-center space-x-2 p-3 bg-red-50 text-red-600 rounded-lg">
+              <span>{isHindi ? 'लॉग आउट' : 'Logout'}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
-    <div className="space-y-4 md:space-y-6 p-3 md:p-0">
+    <div className="space-y-4 md:space-y-6 p-3 md:p-0 min-h-screen bg-gray-50">
+      {/* MOBILE NAVIGATION */}
+      {isMobile && <MobileNavigation />}
+      
+      {/* MOBILE SIDEBAR */}
+      {isMobile && <MobileSidebar />}
+
       {/* MOBILE HEADER BAR */}
       {isMobile && (
-        <div className="bg-white border-b border-gray-200 p-3 fixed top-0 left-0 right-0 z-50 flex items-center justify-between">
+        <div className="bg-white shadow-sm border-b border-gray-200 p-3 fixed top-0 left-0 right-0 z-40 flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <div className={`w-3 h-3 rounded-full ${isBackendConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
-            <span className="text-sm font-medium">VeloxTradeAI</span>
+            <div className={`w-2 h-2 rounded-full ${isBackendConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
+            <span className="text-sm font-bold text-blue-600">VeloxTradeAI</span>
           </div>
-          <div className="flex items-center space-x-3">
-            <span className="text-xs">{formatTime(lastUpdate)}</span>
+          <div className="flex items-center space-x-2">
+            <div className={`px-2 py-1 rounded text-xs ${marketStatus.isOpen ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+              {marketStatus.isOpen ? (isHindi ? 'खुला' : 'OPEN') : (isHindi ? 'बंद' : 'CLOSED')}
+            </div>
             <BatteryCharging className="w-4 h-4 text-green-500" />
           </div>
         </div>
       )}
 
       {/* MOBILE SPACING */}
-      <div className={isMobile ? 'pt-12' : ''}>
-        {/* HEADER */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between">
-          <div>
-            <h1 className="text-xl md:text-2xl font-bold text-gray-900">{t('dashboard') || 'Dashboard'}</h1>
-            <div className="flex flex-wrap items-center gap-2 mt-1">
-              <p className="text-sm md:text-base text-gray-600">
-                {isHindi ? 'रियल-टाइम ट्रेडिंग इनसाइट्स' : 'Real-time trading insights'}
-              </p>
-              {marketStatus.isOpen ? (
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                  <div className="w-1.5 h-1.5 bg-green-500 rounded-full mr-1 animate-pulse"></div>
-                  {t('marketOpen') || 'Market Open'}
-                </span>
-              ) : (
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                  <Clock className="w-3 h-3 mr-1" />
-                  {t('marketClosed') || 'Market Closed'}
-                </span>
-              )}
+      <div className={isMobile ? 'pt-16' : ''}>
+        {/* HEADER - Desktop only */}
+        {!isMobile && (
+          <div className="flex flex-col md:flex-row md:items-center justify-between">
+            <div>
+              <h1 className="text-xl md:text-2xl font-bold text-gray-900">{t('dashboard') || 'Dashboard'}</h1>
+              <div className="flex flex-wrap items-center gap-2 mt-1">
+                <p className="text-sm md:text-base text-gray-600">
+                  {isHindi ? 'रियल-टाइम ट्रेडिंग इनसाइट्स' : 'Real-time trading insights'}
+                </p>
+                {marketStatus.isOpen ? (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                    <div className="w-1.5 h-1.5 bg-green-500 rounded-full mr-1 animate-pulse"></div>
+                    {t('marketOpen') || 'Market Open'}
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                    <Clock className="w-3 h-3 mr-1" />
+                    {t('marketClosed') || 'Market Closed'}
+                  </span>
+                )}
+              </div>
             </div>
-          </div>
-          
-          <div className="flex flex-col md:flex-row md:items-center space-y-2 md:space-y-0 md:space-x-3 mt-3 md:mt-0">
-            <button
-              onClick={() => {
-                refreshStocks();
-                fetchRealData();
-              }}
-              disabled={loading}
-              className="flex items-center justify-center space-x-2 px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 text-sm md:text-base"
-            >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-              <span>{t('refresh') || 'Refresh'}</span>
-            </button>
             
-            <div className="text-right">
-              <span className="text-xs md:text-sm text-gray-500">{isHindi ? 'अपडेट' : 'Updated'}</span>
-              <p className="text-xs md:text-sm font-medium">{formatTime(lastUpdate)}</p>
+            <div className="flex flex-col md:flex-row md:items-center space-y-2 md:space-y-0 md:space-x-3 mt-3 md:mt-0">
+              <button
+                onClick={() => {
+                  refreshStocks();
+                  fetchRealData();
+                }}
+                disabled={loading}
+                className="flex items-center justify-center space-x-2 px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 text-sm md:text-base"
+              >
+                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                <span>{t('refresh') || 'Refresh'}</span>
+              </button>
+              
+              <div className="text-right">
+                <span className="text-xs md:text-sm text-gray-500">{isHindi ? 'अपडेट' : 'Updated'}</span>
+                <p className="text-xs md:text-sm font-medium">{formatTime(lastUpdate)}</p>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* CONNECTION STATUS */}
-        <div className="bg-gradient-to-r from-gray-50 to-blue-50 border border-gray-200 rounded-xl p-4 mt-4">
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-xl p-4 mt-4 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center space-x-3">
               {isBackendConnected ? (
-                <Wifi className="w-5 h-5 text-green-500" />
+                <div className="relative">
+                  <Wifi className="w-5 h-5 text-green-500" />
+                  <div className="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full animate-ping"></div>
+                </div>
               ) : (
                 <WifiOff className="w-5 h-5 text-red-500" />
               )}
@@ -376,10 +499,10 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* STATS GRID */}
+        {/* STATS GRID - Responsive */}
         <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mt-4">
           {stats.map((stat, index) => (
-            <div key={index} className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md transition-shadow">
+            <div key={index} className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md transition-shadow shadow-sm">
               <div className="flex items-center justify-between">
                 <div className={`p-2 rounded-lg ${stat.bgColor}`}>
                   <div className={stat.color}>{stat.icon}</div>
@@ -388,26 +511,28 @@ const Dashboard = () => {
                   <span className={`text-xs font-medium ${stat.color}`}>
                     {stat.change}
                   </span>
-                  {stat.trend === 'up' && <TrendingUp className="w-3 h-3 text-green-500 ml-1 inline" />}
-                  {stat.trend === 'down' && <TrendingDown className="w-3 h-3 text-red-500 ml-1 inline" />}
+                  {stat.trend === 'up' && <ChevronUp className="w-3 h-3 text-green-500 ml-1 inline" />}
+                  {stat.trend === 'down' && <ChevronDown className="w-3 h-3 text-red-500 ml-1 inline" />}
                 </div>
               </div>
-              <h3 className="text-lg md:text-xl font-bold mt-2">{stat.value}</h3>
-              <p className="text-xs md:text-sm text-gray-600">{stat.title}</p>
+              <h3 className="text-lg md:text-xl font-bold mt-2 truncate">{stat.value}</h3>
+              <p className="text-xs md:text-sm text-gray-600 truncate">{stat.title}</p>
             </div>
           ))}
         </div>
 
-        {/* TOP MOVERS */}
-        <div className="flex flex-col md:flex-row gap-4 md:gap-6 mt-4 md:mt-6">
+        {/* TOP MOVERS - Stack on mobile */}
+        <div className="flex flex-col lg:flex-row gap-4 md:gap-6 mt-4 md:mt-6">
           {/* TOP GAINERS */}
-          <div className="bg-white rounded-xl border border-gray-200 p-4 md:p-6 flex-1">
+          <div className="bg-white rounded-xl border border-gray-200 p-4 md:p-6 flex-1 shadow-sm">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-base md:text-lg font-semibold flex items-center space-x-2">
                 <Zap className="w-4 h-4 md:w-5 md:h-5 text-green-500" />
                 <span>{isHindi ? 'टॉप गेनर्स' : 'Top Gainers'}</span>
               </h2>
-              <span className="text-xs md:text-sm text-green-600">{isHindi ? 'लाइव' : 'Live'}</span>
+              <span className="text-xs md:text-sm bg-green-100 text-green-800 px-2 py-1 rounded-full">
+                {isHindi ? 'लाइव' : 'Live'}
+              </span>
             </div>
             
             <div className="space-y-2">
@@ -419,7 +544,7 @@ const Dashboard = () => {
                   </div>
                   <div className="text-right ml-2">
                     <p className="font-bold text-sm md:text-base">₹{safeToFixed(stock.currentPrice)}</p>
-                    <p className="text-xs md:text-sm text-green-600 font-medium">
+                    <p className="text-xs md:text-sm text-green-600 font-medium bg-green-50 px-2 py-1 rounded">
                       +{safeToFixed(stock.changePercent)}%
                     </p>
                   </div>
@@ -429,13 +554,15 @@ const Dashboard = () => {
           </div>
 
           {/* TOP LOSERS */}
-          <div className="bg-white rounded-xl border border-gray-200 p-4 md:p-6 flex-1">
+          <div className="bg-white rounded-xl border border-gray-200 p-4 md:p-6 flex-1 shadow-sm">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-base md:text-lg font-semibold flex items-center space-x-2">
                 <TrendingDown className="w-4 h-4 md:w-5 md:h-5 text-red-500" />
                 <span>{isHindi ? 'टॉप लूज़र्स' : 'Top Losers'}</span>
               </h2>
-              <span className="text-xs md:text-sm text-red-600">{isHindi ? 'लाइव' : 'Live'}</span>
+              <span className="text-xs md:text-sm bg-red-100 text-red-800 px-2 py-1 rounded-full">
+                {isHindi ? 'लाइव' : 'Live'}
+              </span>
             </div>
             
             <div className="space-y-2">
@@ -447,7 +574,7 @@ const Dashboard = () => {
                   </div>
                   <div className="text-right ml-2">
                     <p className="font-bold text-sm md:text-base">₹{safeToFixed(stock.currentPrice)}</p>
-                    <p className="text-xs md:text-sm text-red-600 font-medium">
+                    <p className="text-xs md:text-sm text-red-600 font-medium bg-red-50 px-2 py-1 rounded">
                       {safeToFixed(stock.changePercent)}%
                     </p>
                   </div>
@@ -458,38 +585,41 @@ const Dashboard = () => {
         </div>
 
         {/* TABS */}
-        <div className="bg-white rounded-xl border border-gray-200 mt-4 md:mt-6 overflow-hidden">
+        <div className="bg-white rounded-xl border border-gray-200 mt-4 md:mt-6 overflow-hidden shadow-sm">
           <div className="border-b border-gray-200 overflow-x-auto">
             <nav className="flex min-w-max md:min-w-0">
               <button
                 onClick={() => setActiveTab('recommendations')}
-                className={`py-3 px-4 md:py-4 md:px-6 text-sm font-medium border-b-2 whitespace-nowrap ${
+                className={`py-3 px-4 md:py-4 md:px-6 text-sm font-medium border-b-2 whitespace-nowrap flex items-center space-x-2 ${
                   activeTab === 'recommendations'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                    ? 'border-blue-500 text-blue-600 bg-blue-50'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
                 }`}
               >
-                {isHindi ? 'AI सिफ़ारिशें' : 'AI Recommendations'}
+                <Activity className="w-4 h-4" />
+                <span>{isHindi ? 'AI सिफ़ारिशें' : 'AI Recommendations'}</span>
               </button>
               <button
                 onClick={() => setActiveTab('active')}
-                className={`py-3 px-4 md:py-4 md:px-6 text-sm font-medium border-b-2 whitespace-nowrap ${
+                className={`py-3 px-4 md:py-4 md:px-6 text-sm font-medium border-b-2 whitespace-nowrap flex items-center space-x-2 ${
                   activeTab === 'active'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                    ? 'border-blue-500 text-blue-600 bg-blue-50'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
                 }`}
               >
-                {isHindi ? 'एक्टिव ट्रेड्स' : 'Active Trades'} ({realPortfolio.activeTrades})
+                <TrendingUp className="w-4 h-4" />
+                <span>{isHindi ? 'एक्टिव ट्रेड्स' : 'Active Trades'} ({realPortfolio.activeTrades})</span>
               </button>
               <button
                 onClick={() => setActiveTab('watchlist')}
-                className={`py-3 px-4 md:py-4 md:px-6 text-sm font-medium border-b-2 whitespace-nowrap ${
+                className={`py-3 px-4 md:py-4 md:px-6 text-sm font-medium border-b-2 whitespace-nowrap flex items-center space-x-2 ${
                   activeTab === 'watchlist'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                    ? 'border-blue-500 text-blue-600 bg-blue-50'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
                 }`}
               >
-                {isHindi ? 'वॉचलिस्ट' : 'Watchlist'}
+                <Clock className="w-4 h-4" />
+                <span>{isHindi ? 'वॉचलिस्ट' : 'Watchlist'}</span>
               </button>
             </nav>
           </div>
@@ -505,49 +635,62 @@ const Dashboard = () => {
                       <Filter className="w-4 h-4 md:w-5 md:h-5" />
                       <span>{isHindi ? 'AI स्टॉक सिफ़ारिशें' : 'AI Stock Recommendations'}</span>
                     </h2>
-                    <span className="text-sm text-gray-500">{filteredStocks.length} {isHindi ? 'स्टॉक्स मिले' : 'stocks found'}</span>
+                    <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
+                      {filteredStocks.length} {isHindi ? 'स्टॉक्स मिले' : 'stocks found'}
+                    </span>
                   </div>
                   
                   <div className="flex flex-col md:flex-row md:flex-wrap gap-3">
-                    <select
-                      value={filters.signal}
-                      onChange={(e) => setFilters({ ...filters, signal: e.target.value })}
-                      className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
-                    >
-                      <option value="all">{isHindi ? 'सभी सिग्नल' : 'All Signals'}</option>
-                      <option value="strong_buy">{isHindi ? 'स्ट्रॉन्ग बाय' : 'Strong Buy'}</option>
-                      <option value="buy">{isHindi ? 'बाय' : 'Buy'}</option>
-                      <option value="neutral">{isHindi ? 'न्यूट्रल' : 'Neutral'}</option>
-                    </select>
+                    <div className="w-full md:w-auto">
+                      <label className="block text-xs text-gray-500 mb-1">{isHindi ? 'सिग्नल:' : 'Signal:'}</label>
+                      <select
+                        value={filters.signal}
+                        onChange={(e) => setFilters({ ...filters, signal: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                      >
+                        <option value="all">{isHindi ? 'सभी सिग्नल' : 'All Signals'}</option>
+                        <option value="strong_buy">{isHindi ? 'स्ट्रॉन्ग बाय' : 'Strong Buy'}</option>
+                        <option value="buy">{isHindi ? 'बाय' : 'Buy'}</option>
+                        <option value="neutral">{isHindi ? 'न्यूट्रल' : 'Neutral'}</option>
+                      </select>
+                    </div>
 
-                    <select
-                      value={filters.risk}
-                      onChange={(e) => setFilters({ ...filters, risk: e.target.value })}
-                      className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
-                    >
-                      <option value="all">{isHindi ? 'सभी रिस्क' : 'All Risk'}</option>
-                      <option value="low">{isHindi ? 'कम रिस्क' : 'Low Risk'}</option>
-                      <option value="medium">{isHindi ? 'मध्यम रिस्क' : 'Medium Risk'}</option>
-                      <option value="high">{isHindi ? 'उच्च रिस्क' : 'High Risk'}</option>
-                    </select>
+                    <div className="w-full md:w-auto">
+                      <label className="block text-xs text-gray-500 mb-1">{isHindi ? 'रिस्क:' : 'Risk:'}</label>
+                      <select
+                        value={filters.risk}
+                        onChange={(e) => setFilters({ ...filters, risk: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                      >
+                        <option value="all">{isHindi ? 'सभी रिस्क' : 'All Risk'}</option>
+                        <option value="low">{isHindi ? 'कम रिस्क' : 'Low Risk'}</option>
+                        <option value="medium">{isHindi ? 'मध्यम रिस्क' : 'Medium Risk'}</option>
+                        <option value="high">{isHindi ? 'उच्च रिस्क' : 'High Risk'}</option>
+                      </select>
+                    </div>
 
-                    <select
-                      value={filters.timeFrame}
-                      onChange={(e) => setFilters({ ...filters, timeFrame: e.target.value })}
-                      className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
-                    >
-                      <option value="all">{isHindi ? 'सभी टाइमफ्रेम' : 'All Timeframes'}</option>
-                      <option value="intraday">{isHindi ? 'इंट्राडे' : 'Intraday'}</option>
-                      <option value="swing">{isHindi ? 'स्विंग' : 'Swing'}</option>
-                      <option value="positional">{isHindi ? 'पोजिशनल' : 'Positional'}</option>
-                    </select>
+                    <div className="w-full md:w-auto">
+                      <label className="block text-xs text-gray-500 mb-1">{isHindi ? 'टाइमफ्रेम:' : 'Timeframe:'}</label>
+                      <select
+                        value={filters.timeFrame}
+                        onChange={(e) => setFilters({ ...filters, timeFrame: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                      >
+                        <option value="all">{isHindi ? 'सभी टाइमफ्रेम' : 'All Timeframes'}</option>
+                        <option value="intraday">{isHindi ? 'इंट्राडे' : 'Intraday'}</option>
+                        <option value="swing">{isHindi ? 'स्विंग' : 'Swing'}</option>
+                        <option value="positional">{isHindi ? 'पोजिशनल' : 'Positional'}</option>
+                      </select>
+                    </div>
 
-                    <button
-                      onClick={() => setFilters({ signal: 'all', risk: 'all', timeFrame: 'all' })}
-                      className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
-                    >
-                      {isHindi ? 'फ़िल्टर्स हटाएँ' : 'Clear Filters'}
-                    </button>
+                    <div className="w-full md:w-auto flex items-end">
+                      <button
+                        onClick={() => setFilters({ signal: 'all', risk: 'all', timeFrame: 'all' })}
+                        className="w-full md:w-auto px-4 py-2 text-sm text-gray-600 hover:text-gray-800 border border-gray-300 rounded-lg hover:bg-gray-50"
+                      >
+                        {isHindi ? 'फ़िल्टर्स हटाएँ' : 'Clear Filters'}
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -595,55 +738,56 @@ const Dashboard = () => {
 
             {activeTab === 'active' && (
               <div>
-                <h2 className="text-base md:text-lg font-semibold mb-4">
-                  {isHindi ? 'एक्टिव ट्रेड्स' : 'Active Trades'}
+                <h2 className="text-base md:text-lg font-semibold mb-4 flex items-center space-x-2">
+                  <TrendingUp className="w-5 h-5" />
+                  <span>{isHindi ? 'एक्टिव ट्रेड्स' : 'Active Trades'}</span>
                 </h2>
                 {realPortfolio.activeTrades > 0 && realTrades.length > 0 ? (
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto rounded-lg border border-gray-200">
                     <table className="w-full min-w-max">
                       <thead>
                         <tr className="bg-gray-50">
-                          <th className="py-2 px-3 md:py-3 md:px-6 text-left text-xs md:text-sm font-medium text-gray-700">
+                          <th className="py-3 px-4 text-left text-xs md:text-sm font-medium text-gray-700">
                             {isHindi ? 'स्टॉक' : 'Stock'}
                           </th>
-                          <th className="py-2 px-3 md:py-3 md:px-6 text-left text-xs md:text-sm font-medium text-gray-700">
+                          <th className="py-3 px-4 text-left text-xs md:text-sm font-medium text-gray-700">
                             {isHindi ? 'एंट्री' : 'Entry'}
                           </th>
-                          <th className="py-2 px-3 md:py-3 md:px-6 text-left text-xs md:text-sm font-medium text-gray-700">
+                          <th className="py-3 px-4 text-left text-xs md:text-sm font-medium text-gray-700">
                             {isHindi ? 'करंट' : 'Current'}
                           </th>
-                          <th className="py-2 px-3 md:py-3 md:px-6 text-left text-xs md:text-sm font-medium text-gray-700">
+                          <th className="py-3 px-4 text-left text-xs md:text-sm font-medium text-gray-700">
                             P&L
                           </th>
-                          <th className="py-2 px-3 md:py-3 md:px-6 text-left text-xs md:text-sm font-medium text-gray-700">
+                          <th className="py-3 px-4 text-left text-xs md:text-sm font-medium text-gray-700">
                             {isHindi ? 'एक्शन' : 'Action'}
                           </th>
                         </tr>
                       </thead>
-                      <tbody>
+                      <tbody className="divide-y divide-gray-200">
                         {realTrades.filter(t => t.status === 'open').map((trade, index) => (
-                          <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
-                            <td className="py-2 px-3 md:py-4 md:px-6">
+                          <tr key={index} className="hover:bg-gray-50">
+                            <td className="py-3 px-4">
                               <p className="font-medium text-sm">{trade.symbol}</p>
                               <p className="text-xs text-gray-500">{trade.action}</p>
                             </td>
-                            <td className="py-2 px-3 md:py-4 md:px-6">
+                            <td className="py-3 px-4">
                               <p className="text-sm">₹{safeToFixed(trade.entryPrice)}</p>
                             </td>
-                            <td className="py-2 px-3 md:py-4 md:px-6">
+                            <td className="py-3 px-4">
                               <p className="text-sm">₹{safeToFixed(trade.currentPrice || trade.entryPrice)}</p>
                             </td>
-                            <td className="py-2 px-3 md:py-4 md:px-6">
-                              <p className={`text-sm font-medium ${
-                                (trade.pnl || 0) >= 0 ? 'text-green-600' : 'text-red-600'
+                            <td className="py-3 px-4">
+                              <p className={`text-sm font-medium px-2 py-1 rounded-full inline-block ${
+                                (trade.pnl || 0) >= 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                               }`}>
                                 ₹{safeToFixed(trade.pnl)}
                               </p>
                             </td>
-                            <td className="py-2 px-3 md:py-4 md:px-6">
+                            <td className="py-3 px-4">
                               <button
                                 onClick={() => setExitPopupData(trade)}
-                                className="px-3 py-1 bg-red-100 text-red-700 rounded-lg text-xs hover:bg-red-200"
+                                className="px-3 py-1 bg-red-600 text-white rounded-lg text-xs hover:bg-red-700 font-medium"
                               >
                                 {isHindi ? 'एक्ज़िट' : 'Exit'}
                               </button>
@@ -669,8 +813,9 @@ const Dashboard = () => {
 
             {activeTab === 'watchlist' && (
               <div>
-                <h2 className="text-base md:text-lg font-semibold mb-4">
-                  {isHindi ? 'आपकी वॉचलिस्ट' : 'Your Watchlist'}
+                <h2 className="text-base md:text-lg font-semibold mb-4 flex items-center space-x-2">
+                  <Clock className="w-5 h-5" />
+                  <span>{isHindi ? 'आपकी वॉचलिस्ट' : 'Your Watchlist'}</span>
                 </h2>
                 <div className="text-center py-8 md:py-12">
                   <Clock className="w-10 h-10 md:w-12 md:h-12 text-gray-400 mx-auto mb-4" />
@@ -687,48 +832,48 @@ const Dashboard = () => {
         </div>
 
         {/* MARKET INSIGHTS */}
-        <div className="bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-100 rounded-xl p-4 md:p-6 mt-4 md:mt-6">
+        <div className="bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-100 rounded-xl p-4 md:p-6 mt-4 md:mt-6 shadow-sm">
           <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-2">
             <h2 className="text-base md:text-lg font-semibold flex items-center space-x-2">
               <Activity className="w-4 h-4 md:w-5 md:h-5" />
               <span>{isHindi ? 'मार्केट इनसाइट्स' : 'Market Insights'}</span>
             </h2>
-            <span className="text-xs md:text-sm text-blue-600">
+            <span className="text-xs md:text-sm text-blue-600 bg-blue-100 px-3 py-1 rounded-full">
               {isHindi ? 'रियल-टाइम' : 'Real-time'}
             </span>
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-white rounded-lg p-3 md:p-4">
-              <p className="text-xs md:text-sm text-gray-500 mb-1">
+            <div className="bg-white rounded-lg p-4 shadow-sm">
+              <p className="text-xs md:text-sm text-gray-500 mb-2">
                 {isHindi ? 'मार्केट सेन्टीमेंट' : 'Market Sentiment'}
               </p>
-              <div className="flex items-center space-x-2">
-                <div className="h-1.5 md:h-2 flex-1 bg-gray-200 rounded-full overflow-hidden">
+              <div className="flex items-center space-x-3">
+                <div className="h-2 flex-1 bg-gray-200 rounded-full overflow-hidden">
                   <div className="h-full bg-green-500" style={{ width: '65%' }}></div>
                 </div>
-                <span className="text-xs md:text-sm font-medium text-green-600">
+                <span className="text-xs md:text-sm font-medium text-green-600 bg-green-50 px-2 py-1 rounded">
                   {isHindi ? 'बुलिश' : 'Bullish'}
                 </span>
               </div>
             </div>
             
-            <div className="bg-white rounded-lg p-3 md:p-4">
-              <p className="text-xs md:text-sm text-gray-500 mb-1">
+            <div className="bg-white rounded-lg p-4 shadow-sm">
+              <p className="text-xs md:text-sm text-gray-500 mb-2">
                 {isHindi ? 'वोलैटिलिटी इंडेक्स' : 'Volatility Index'}
               </p>
-              <p className="text-base md:text-lg font-bold">18.4</p>
-              <p className="text-xs text-gray-500">
+              <p className="text-lg md:text-xl font-bold">18.4</p>
+              <p className="text-xs text-gray-500 bg-gray-100 inline-block px-2 py-1 rounded">
                 {isHindi ? 'मध्यम रिस्क' : 'Medium Risk'}
               </p>
             </div>
             
-            <div className="bg-white rounded-lg p-3 md:p-4">
-              <p className="text-xs md:text-sm text-gray-500 mb-1">
+            <div className="bg-white rounded-lg p-4 shadow-sm">
+              <p className="text-xs md:text-sm text-gray-500 mb-2">
                 {isHindi ? 'AI कॉन्फिडेंस' : 'AI Confidence'}
               </p>
-              <p className="text-base md:text-lg font-bold">85.6%</p>
-              <p className="text-xs text-gray-500">
+              <p className="text-lg md:text-xl font-bold">85.6%</p>
+              <p className="text-xs text-gray-500 bg-blue-50 text-blue-600 inline-block px-2 py-1 rounded">
                 {isHindi ? 'उच्च एक्यूरेसी' : 'High Accuracy'}
               </p>
             </div>
