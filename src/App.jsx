@@ -31,27 +31,28 @@ const PublicRoute = ({ children }) => {
 };
 
 function App() {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const handleResize = () => {
-      const mobile = window.innerWidth < 1024;
+      const mobile = window.innerWidth < 768; // Changed to 768 for mobile
       setIsMobile(mobile);
-      // On desktop, sidebar should be open by default
-      if (!mobile) {
-        setSidebarOpen(true);
-      } else {
+      
+      // Mobile पर sidebar automatically close
+      if (mobile) {
         setSidebarOpen(false);
+      } else {
+        setSidebarOpen(true);
       }
     };
 
     handleResize();
     window.addEventListener('resize', handleResize);
     
-    // Check authentication - show loading for 1 second
-    setTimeout(() => setIsLoading(false), 1000);
+    // Check authentication
+    setTimeout(() => setIsLoading(false), 500);
     
     return () => window.removeEventListener('resize', handleResize);
   }, []);
@@ -60,19 +61,20 @@ function App() {
     setSidebarOpen(!sidebarOpen);
   };
 
-  const closeSidebar = () => {
-    if (isMobile) {
-      setSidebarOpen(false);
-    }
-  };
-
   if (isLoading) {
     return (
-      <div className="flex justify-center items-center h-screen bg-gradient-to-br from-gray-900 to-gray-950">
+      <div className="flex justify-center items-center h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
         <div className="text-center">
-          <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <h2 className="text-2xl font-bold text-white mb-2">Loading VeloxTradeAI</h2>
-          <p className="text-gray-400">Initializing AI Trading Engine...</p>
+          <div className="relative mx-auto mb-6">
+            <div className="absolute inset-0 bg-gradient-to-r from-emerald-500 to-cyan-500 rounded-2xl blur-xl opacity-60"></div>
+            <div className="relative bg-gradient-to-br from-slate-900 to-slate-950 p-4 rounded-2xl border border-emerald-500/40">
+              <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+            </div>
+          </div>
+          <h2 className="text-2xl font-bold bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent mb-2">
+            VeloxTradeAI
+          </h2>
+          <p className="text-emerald-300/60">Initializing AI Trading Platform...</p>
         </div>
       </div>
     );
@@ -85,90 +87,93 @@ function App() {
           <AuthProvider>
             <BrokerProvider>
               <StocksProvider>
-                <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
-                  <Routes>
-                    {/* Public Routes */}
-                    <Route path="/login" element={
-                      <PublicRoute>
-                        <Suspense fallback={
-                          <div className="flex justify-center items-center h-screen">
-                            <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                          </div>
-                        }>
-                          <Login />
-                        </Suspense>
-                      </PublicRoute>
-                    } />
-                    <Route path="/register" element={
-                      <PublicRoute>
-                        <Suspense fallback={
-                          <div className="flex justify-center items-center h-screen">
-                            <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                          </div>
-                        }>
-                          <Register />
-                        </Suspense>
-                      </PublicRoute>
-                    } />
-                    
-                    {/* Protected Routes */}
-                    <Route path="/*" element={
-                      <ProtectedRoute>
-                        <div className="flex min-h-screen">
-                          {/* Mobile Backdrop */}
-                          {isMobile && sidebarOpen && (
-                            <div 
-                              className="fixed inset-0 bg-black/50 z-30"
-                              onClick={closeSidebar}
-                            />
-                          )}
-                          
-                          {/* Sidebar */}
-                          <div className={`
-                            ${isMobile ? 'fixed' : 'sticky top-0 h-screen'}
-                            z-40 transition-transform duration-300 ease-in-out
-                            ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-                            ${!isMobile ? 'translate-x-0' : ''}
-                          `}>
-                            <Sidebar 
-                              isOpen={sidebarOpen} 
-                              toggleSidebar={toggleSidebar}
-                            />
-                          </div>
-                          
-                          {/* Main Content */}
-                          <div className="flex-1 flex flex-col w-full min-h-screen">
+                {/* REMOVED BACKGROUND CLASS HERE - Let pages handle their own background */}
+                <Routes>
+                  {/* Public Routes */}
+                  <Route path="/login" element={
+                    <PublicRoute>
+                      <Suspense fallback={
+                        <div className="flex justify-center items-center h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+                          <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+                        </div>
+                      }>
+                        <Login />
+                      </Suspense>
+                    </PublicRoute>
+                  } />
+                  <Route path="/register" element={
+                    <PublicRoute>
+                      <Suspense fallback={
+                        <div className="flex justify-center items-center h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+                          <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+                        </div>
+                      }>
+                        <Register />
+                      </Suspense>
+                    </PublicRoute>
+                  } />
+                  
+                  {/* Protected Routes */}
+                  <Route path="/*" element={
+                    <ProtectedRoute>
+                      <div className="flex min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+                        {/* Mobile Overlay */}
+                        {isMobile && sidebarOpen && (
+                          <div 
+                            className="fixed inset-0 bg-black/80 backdrop-blur-md z-40 lg:hidden"
+                            onClick={() => setSidebarOpen(false)}
+                          />
+                        )}
+                        
+                        {/* Sidebar - Fixed positioning for mobile */}
+                        <div className={`
+                          ${isMobile ? 'fixed inset-y-0 left-0 z-50' : 'relative z-10'}
+                          transition-transform duration-300 ease-in-out
+                          ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+                          ${!isMobile ? 'translate-x-0' : ''}
+                        `}>
+                          <Sidebar 
+                            isOpen={sidebarOpen} 
+                            toggleSidebar={toggleSidebar}
+                          />
+                        </div>
+                        
+                        {/* Main Content Area */}
+                        <div className="flex-1 flex flex-col w-full min-h-screen overflow-hidden">
+                          {/* Navbar - Fixed at top */}
+                          <div className={`${isMobile ? 'fixed top-0 left-0 right-0 z-30' : 'relative z-20'}`}>
                             <Navbar 
                               toggleSidebar={toggleSidebar}
                               isSidebarOpen={sidebarOpen}
                             />
-                            
-                            <main className="flex-1 p-4 md:p-6 mt-16 md:mt-0 overflow-y-auto">
-                              <Suspense fallback={
-                                <div className="flex justify-center items-center h-64">
-                                  <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                                </div>
-                              }>
-                                <Routes>
-                                  <Route path="/" element={<Dashboard />} />
-                                  <Route path="/dashboard" element={<Dashboard />} />
-                                  <Route path="/analytics" element={<Analytics />} />
-                                  <Route path="/subscription" element={<Subscription />} />
-                                  <Route path="/settings" element={<Settings />} />
-                                  <Route path="/broker-settings" element={<BrokerSettings />} />
-                                  <Route path="*" element={<Navigate to="/" replace />} />
-                                </Routes>
-                              </Suspense>
-                            </main>
                           </div>
                           
-                          {/* Chat Widget */}
-                          <ChatWidget />
+                          {/* Main Content with proper spacing */}
+                          <div className={`flex-1 overflow-y-auto ${isMobile ? 'pt-16' : ''}`}>
+                            <Suspense fallback={
+                              <div className="flex justify-center items-center h-64">
+                                <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+                              </div>
+                            }>
+                              <Routes>
+                                <Route path="/" element={<Dashboard />} />
+                                <Route path="/dashboard" element={<Dashboard />} />
+                                <Route path="/analytics" element={<Analytics />} />
+                                <Route path="/subscription" element={<Subscription />} />
+                                <Route path="/settings" element={<Settings />} />
+                                <Route path="/broker-settings" element={<BrokerSettings />} />
+                                <Route path="*" element={<Navigate to="/" replace />} />
+                              </Routes>
+                            </Suspense>
+                          </div>
                         </div>
-                      </ProtectedRoute>
-                    } />
-                  </Routes>
-                </div>
+                        
+                        {/* Chat Widget - Will add later */}
+                        {/* <ChatWidget /> */}
+                      </div>
+                    </ProtectedRoute>
+                  } />
+                </Routes>
               </StocksProvider>
             </BrokerProvider>
           </AuthProvider>
