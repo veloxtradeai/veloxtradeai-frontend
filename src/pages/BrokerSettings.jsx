@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import BrokerSelector from '../components/BrokerSelector';
 import { 
   Link, 
   Unlink, 
@@ -21,11 +20,13 @@ import {
   Settings,
   Wallet,
   TrendingUp,
-  TrendingDown
+  TrendingDown,
+  Wifi,
+  WifiOff
 } from 'lucide-react';
 
-// API Configuration
-const API_BASE_URL = 'https://veloxtradeai-api.velox-trade-ai.workers.dev';
+// API Configuration - Use your actual backend URL
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://veloxtradeai-api.velox-trade-ai.workers.dev';
 
 const BrokerSettings = () => {
   const [brokers, setBrokers] = useState([]);
@@ -37,14 +38,16 @@ const BrokerSettings = () => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState({});
   const [selectedHoldings, setSelectedHoldings] = useState([]);
+  const [connectionTestResults, setConnectionTestResults] = useState({});
   
+  // Real API keys state
   const [apiKeys, setApiKeys] = useState({
-    zerodha: { key: '', secret: '', userId: '', pin: '', totp: '' },
-    upstox: { key: '', secret: '', userId: '', pin: '' },
-    groww: { key: '', secret: '', userId: '', pin: '' },
-    angelone: { key: '', secret: '', userId: '', pin: '' },
-    icicidirect: { key: '', secret: '', userId: '', pin: '' },
-    hdfcsec: { key: '', secret: '', userId: '', pin: '' }
+    zerodha: { api_key: '', api_secret: '', user_id: '', pin: '', totp: '' },
+    upstox: { api_key: '', api_secret: '', user_id: '', pin: '' },
+    groww: { api_key: '', api_secret: '', user_id: '', pin: '' },
+    angelone: { api_key: '', api_secret: '', user_id: '', pin: '' },
+    icicidirect: { api_key: '', api_secret: '', user_id: '', pin: '' },
+    hdfcsec: { api_key: '', api_secret: '', user_id: '', pin: '' }
   });
 
   const [brokerConnections, setBrokerConnections] = useState([]);
@@ -70,198 +73,226 @@ const BrokerSettings = () => {
   // Load brokers from backend
   useEffect(() => {
     loadBrokersAndHoldings();
+    
+    // Set up periodic refresh every 30 seconds
+    const interval = setInterval(() => {
+      loadBrokersAndHoldings(false); // Silent refresh
+    }, 30000);
+    
+    return () => clearInterval(interval);
   }, []);
 
-  const loadBrokersAndHoldings = async () => {
-    setLoading(true);
+  const loadBrokersAndHoldings = async (showLoading = true) => {
+    if (showLoading) setLoading(true);
     setError(null);
     
     try {
       const userId = getUserId();
+      const token = getUserToken();
       
-      // 1. Fetch broker connections
-      const brokersRes = await fetch(`${API_BASE_URL}/api/broker/data?user_id=${userId}`);
+      // 1. Fetch broker connections from actual backend
+      const brokersRes = await fetch(`${API_BASE_URL}/api/brokers?user_id=${userId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (!brokersRes.ok) {
+        throw new Error(`HTTP error! status: ${brokersRes.status}`);
+      }
+      
       const brokersData = await brokersRes.json();
       
       if (brokersData.success) {
-        setBrokers(brokersData.brokers || []);
-        setBrokerConnections(brokersData.brokers.map(broker => ({
-          id: broker.id,
-          name: broker.broker_name,
-          status: broker.is_active ? 'connected' : 'disconnected',
-          connectedSince: broker.connected_at ? new Date(broker.connected_at).toLocaleDateString('en-IN') : null,
-          lastSync: broker.last_sync || null,
-          holdings: 0, // Will be updated from holdings
-          balance: 0,
-          equity: 0,
-          profitLoss: '0',
-          todayTrades: 0,
-          accountType: broker.account_type || 'Regular',
-          apiKey: broker.api_key ? `${broker.api_key.substring(0, 8)}...` : '',
-          apiSecret: broker.api_secret ? '********' : ''
-        })));
-      }
-
-      // 2. Fetch holdings (from trades table)
-      const tradesRes = await fetch(`${API_BASE_URL}/api/trades?user_id=${userId}`);
-      const tradesData = await tradesRes.json();
-      
-      if (tradesData.success) {
-        const openTrades = tradesData.trades.filter(trade => trade.status === 'open');
-        setHoldings(openTrades.map(trade => {
-          const currentValue = trade.entry_price * trade.quantity * 1.02; // Assume 2% gain
-          const pnl = currentValue - (trade.entry_price * trade.quantity);
-          const pnlPercent = (trade.entry_price * trade.quantity) > 0 ? 
-            (pnl / (trade.entry_price * trade.quantity)) * 100 : 0;
+        const brokerList = brokersData.brokers || [];
+        setBrokers(brokerList);
+        
+        // Transform to broker connections format
+        const connections = brokerList.map(broker => {
+          // Check if broker is actually connected by verifying API keys exist
+          const isConnected = broker.api_key && broker.api_secret && broker.is_active;
           
           return {
-            symbol: trade.symbol,
-            name: trade.symbol, // Could be mapped to actual names
-            quantity: trade.quantity || 0,
-            avgPrice: trade.entry_price || 0,
-            currentPrice: trade.entry_price * 1.02, // Assume 2% up
-            investedAmount: trade.entry_price * trade.quantity,
-            currentValue: currentValue,
-            pnl: pnl,
-            pnlPercent: pnlPercent,
-            broker: 'Zerodha', // Default for now
-            tradeId: trade.id,
-            status: trade.status
+            id: broker.id || broker.broker_id,
+            name: broker.broker_name || broker.name,
+            status: isConnected ? 'connected' : 'disconnected',
+            connectedSince: broker.connected_at ? 
+              new Date(broker.connected_at).toLocaleDateString('en-IN', {
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric'
+              }) : 
+              broker.created_at ? 
+                new Date(broker.created_at).toLocaleDateString('en-IN', {
+                  day: '2-digit',
+                  month: 'short',
+                  year: 'numeric'
+                }) : null,
+            lastSync: broker.last_sync_time || broker.last_updated,
+            holdings: broker.total_holdings || 0,
+            balance: broker.available_balance || 0,
+            equity: broker.total_equity || 0,
+            profitLoss: broker.total_pnl >= 0 ? 
+              `+₹${Math.round(broker.total_pnl || 0).toLocaleString()}` : 
+              `-₹${Math.round(Math.abs(broker.total_pnl || 0)).toLocaleString()}`,
+            todayTrades: broker.today_trades || 0,
+            accountType: broker.account_type || 'Regular',
+            apiKey: broker.api_key ? `${broker.api_key.substring(0, 8)}...` : '',
+            apiSecret: broker.api_secret ? '********' : '',
+            // Real connection check fields
+            lastChecked: broker.last_checked,
+            connectionHealth: broker.connection_health || 'unknown',
+            isActive: broker.is_active || false
           };
-        }));
-        
-        // Calculate portfolio stats
-        const totalInvestment = openTrades.reduce((sum, trade) => 
-          sum + (trade.entry_price * trade.quantity), 0);
-        const totalCurrentValue = openTrades.reduce((sum, trade) => 
-          sum + (trade.entry_price * trade.quantity * 1.02), 0);
-        const totalPnl = totalCurrentValue - totalInvestment;
-        const totalPnlPercent = totalInvestment > 0 ? (totalPnl / totalInvestment) * 100 : 0;
-        
-        setPortfolioStats({
-          totalInvestment,
-          currentValue: totalCurrentValue,
-          totalPnl,
-          totalPnlPercent,
-          todayPnl: totalPnl * 0.1 // Assume 10% of total is today's P&L
         });
         
-        // Update holdings count in broker connections
-        setBrokerConnections(prev => prev.map(broker => ({
-          ...broker,
-          holdings: openTrades.filter(t => !broker.name || broker.name === 'Zerodha').length,
-          balance: 10000, // Mock available balance
-          equity: totalCurrentValue * 0.5, // Mock equity
-          profitLoss: totalPnl >= 0 ? `+₹${Math.round(totalPnl).toLocaleString()}` : `-₹${Math.round(Math.abs(totalPnl)).toLocaleString()}`
-        })));
+        setBrokerConnections(connections);
+        
+        // 2. Fetch actual holdings from backend
+        try {
+          const holdingsRes = await fetch(`${API_BASE_URL}/api/holdings?user_id=${userId}`, {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
+          
+          if (holdingsRes.ok) {
+            const holdingsData = await holdingsRes.json();
+            
+            if (holdingsData.success) {
+              const holdingsList = holdingsData.holdings || holdingsData.data || [];
+              setHoldings(holdingsList.map(holding => ({
+                symbol: holding.symbol || holding.trading_symbol,
+                name: holding.company_name || holding.symbol,
+                quantity: holding.quantity || holding.total_quantity || 0,
+                avgPrice: holding.average_price || holding.buy_price || 0,
+                currentPrice: holding.last_price || holding.current_price || 0,
+                investedAmount: holding.invested_amount || (holding.quantity * holding.average_price) || 0,
+                currentValue: holding.current_value || (holding.quantity * holding.last_price) || 0,
+                pnl: holding.pnl || 0,
+                pnlPercent: holding.pnl_percentage || 0,
+                broker: holding.broker_name || 'Unknown',
+                tradeId: holding.id,
+                status: 'open'
+              })));
+              
+              // Calculate real portfolio stats
+              const totalInvestment = holdingsList.reduce((sum, h) => 
+                sum + (h.invested_amount || (h.quantity * h.average_price) || 0), 0);
+              const totalCurrentValue = holdingsList.reduce((sum, h) => 
+                sum + (h.current_value || (h.quantity * h.last_price) || 0), 0);
+              const totalPnl = holdingsList.reduce((sum, h) => sum + (h.pnl || 0), 0);
+              const totalPnlPercent = totalInvestment > 0 ? (totalPnl / totalInvestment) * 100 : 0;
+              
+              setPortfolioStats({
+                totalInvestment,
+                currentValue: totalCurrentValue,
+                totalPnl,
+                totalPnlPercent,
+                todayPnl: holdingsList.reduce((sum, h) => sum + (h.today_pnl || 0), 0)
+              });
+            }
+          }
+        } catch (holdingsError) {
+          console.warn('Could not fetch holdings:', holdingsError);
+          // Holdings fetch is optional, continue with broker data
+        }
+        
+        // 3. Test connections for each broker
+        const testPromises = connections.map(async (broker) => {
+          if (broker.status === 'connected') {
+            try {
+              const testRes = await fetch(`${API_BASE_URL}/api/brokers/${broker.id}/test`, {
+                headers: {
+                  'Authorization': `Bearer ${token}`
+                }
+              });
+              
+              if (testRes.ok) {
+                const testData = await testRes.json();
+                return {
+                  brokerId: broker.id,
+                  status: testData.connected ? 'success' : 'failed',
+                  message: testData.message || ''
+                };
+              }
+            } catch (testError) {
+              console.warn(`Connection test failed for ${broker.name}:`, testError);
+            }
+          }
+          return null;
+        });
+        
+        const testResults = await Promise.all(testPromises);
+        testResults.forEach(result => {
+          if (result) {
+            setConnectionTestResults(prev => ({
+              ...prev,
+              [result.brokerId]: result
+            }));
+          }
+        });
+      } else {
+        throw new Error(brokersData.message || 'Failed to load broker data');
       }
       
     } catch (error) {
       console.error('Failed to load broker data:', error);
       setError('Failed to connect to backend. Please check your connection.');
-      // Load mock data as fallback
-      loadMockData();
+      // Don't load mock data - show actual error
+      setBrokers([]);
+      setHoldings([]);
+      setBrokerConnections([]);
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
-  };
-
-  const loadMockData = () => {
-    // Mock broker connections
-    const mockBrokers = [
-      {
-        id: 'broker-1',
-        name: 'Zerodha',
-        status: 'connected',
-        connectedSince: '2024-01-15',
-        lastSync: '15:45',
-        holdings: 8,
-        balance: 125000,
-        equity: 285000,
-        profitLoss: '+₹12,500',
-        todayTrades: 3,
-        accountType: 'Regular',
-        apiKey: 'XK8H2D...',
-        apiSecret: '********'
-      },
-      {
-        id: 'broker-2',
-        name: 'Groww',
-        status: 'connected',
-        connectedSince: '2024-02-01',
-        lastSync: '14:20',
-        holdings: 5,
-        balance: 75000,
-        equity: 185000,
-        profitLoss: '+₹8,250',
-        todayTrades: 2,
-        accountType: 'Regular',
-        apiKey: 'GRW9A3...',
-        apiSecret: '********'
-      }
-    ];
-    
-    setBrokerConnections(mockBrokers);
-    setBrokers(mockBrokers);
-    
-    // Mock holdings
-    const mockHoldings = [
-      { symbol: 'RELIANCE', name: 'Reliance Industries', quantity: 10, avgPrice: 2850, currentPrice: 2925, investedAmount: 28500, currentValue: 29250, pnl: 750, pnlPercent: 2.63, broker: 'Zerodha', todayPnl: 125 },
-      { symbol: 'TCS', name: 'Tata Consultancy Services', quantity: 15, avgPrice: 3750, currentPrice: 3825, investedAmount: 56250, currentValue: 57375, pnl: 1125, pnlPercent: 2.0, broker: 'Zerodha', todayPnl: 225 },
-      { symbol: 'HDFCBANK', name: 'HDFC Bank', quantity: 20, avgPrice: 1650, currentPrice: 1683, investedAmount: 33000, currentValue: 33660, pnl: 660, pnlPercent: 2.0, broker: 'Groww', todayPnl: 132 },
-      { symbol: 'INFY', name: 'Infosys', quantity: 25, avgPrice: 1500, currentPrice: 1522, investedAmount: 37500, currentValue: 38050, pnl: 550, pnlPercent: 1.47, broker: 'Groww', todayPnl: 110 },
-      { symbol: 'ICICIBANK', name: 'ICICI Bank', quantity: 30, avgPrice: 1100, currentPrice: 1122, investedAmount: 33000, currentValue: 33660, pnl: 660, pnlPercent: 2.0, broker: 'Zerodha', todayPnl: 132 }
-    ];
-    
-    setHoldings(mockHoldings);
-    
-    // Calculate portfolio stats
-    const totalInvestment = mockHoldings.reduce((sum, h) => sum + h.investedAmount, 0);
-    const totalCurrentValue = mockHoldings.reduce((sum, h) => sum + h.currentValue, 0);
-    const totalPnl = mockHoldings.reduce((sum, h) => sum + h.pnl, 0);
-    const totalPnlPercent = totalInvestment > 0 ? (totalPnl / totalInvestment) * 100 : 0;
-    const todayPnl = mockHoldings.reduce((sum, h) => sum + (h.todayPnl || 0), 0);
-    
-    setPortfolioStats({
-      totalInvestment,
-      currentValue: totalCurrentValue,
-      totalPnl,
-      totalPnlPercent,
-      todayPnl
-    });
   };
 
   const syncHoldings = async (brokerId) => {
     setIsSyncing(true);
     try {
       const userId = getUserId();
-      const broker = brokerConnections.find(b => b.id === brokerId);
+      const token = getUserToken();
       
-      if (!broker) {
-        throw new Error('Broker not found');
+      const response = await fetch(`${API_BASE_URL}/api/brokers/${brokerId}/sync`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          user_id: userId
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Sync failed with status: ${response.status}`);
       }
       
-      // In a real implementation, this would call broker API
-      // For now, simulate syncing by updating lastSync time
+      const data = await response.json();
       
-      // Update broker connection
-      setBrokerConnections(prev => prev.map(b => 
-        b.id === brokerId 
-          ? { 
-              ...b, 
-              lastSync: new Date().toLocaleTimeString('en-IN', { 
-                hour: '2-digit', 
-                minute: '2-digit'
-              }),
-              holdings: Math.min(b.holdings + 2, 15) // Mock increase
-            }
-          : b
-      ));
-      
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      return { success: true, message: 'Holdings synced successfully' };
+      if (data.success) {
+        // Update the broker's last sync time
+        setBrokerConnections(prev => prev.map(broker => 
+          broker.id === brokerId 
+            ? { 
+                ...broker, 
+                lastSync: new Date().toLocaleTimeString('en-IN', { 
+                  hour: '2-digit', 
+                  minute: '2-digit'
+                }),
+                holdings: data.total_holdings || broker.holdings
+              }
+            : broker
+        ));
+        
+        // Refresh holdings data
+        await loadBrokersAndHoldings(false);
+        
+        return { success: true, message: data.message || 'Holdings synced successfully' };
+      } else {
+        throw new Error(data.message || 'Sync failed');
+      }
     } catch (error) {
       console.error('Sync failed:', error);
       throw error;
@@ -297,18 +328,27 @@ const BrokerSettings = () => {
     
     setIsSyncing(true);
     try {
+      const results = [];
       for (const broker of connectedBrokers) {
         try {
-          await syncHoldings(broker.id);
+          const result = await syncHoldings(broker.id);
+          results.push({ broker: broker.name, success: true });
         } catch (err) {
           console.error(`Sync failed for ${broker.name}:`, err);
+          results.push({ broker: broker.name, success: false, error: err.message });
         }
       }
       
-      alert(`✅ ${connectedBrokers.length} broker(s) synced successfully!`);
+      const successCount = results.filter(r => r.success).length;
+      if (successCount === connectedBrokers.length) {
+        alert(`✅ All ${connectedBrokers.length} broker(s) synced successfully!`);
+      } else {
+        const failed = results.filter(r => !r.success);
+        alert(`✅ ${successCount} broker(s) synced, ❌ ${failed.length} failed. Check console for details.`);
+      }
     } catch (error) {
       console.error('Sync all failed:', error);
-      alert('❌ Some brokers failed to sync');
+      alert('❌ Sync operation failed');
     } finally {
       setIsSyncing(false);
     }
@@ -319,12 +359,13 @@ const BrokerSettings = () => {
     
     try {
       const currentUserId = getUserId();
+      const token = getUserToken();
       
-      const response = await fetch(`${API_BASE_URL}/api/broker/connect`, {
+      const response = await fetch(`${API_BASE_URL}/api/brokers/connect`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${getUserToken()}`
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
           user_id: currentUserId,
@@ -332,7 +373,8 @@ const BrokerSettings = () => {
           api_key: apiKey,
           api_secret: apiSecret,
           user_id_broker: userId,
-          pin: pin
+          pin: pin,
+          is_active: true
         })
       });
       
@@ -344,7 +386,11 @@ const BrokerSettings = () => {
           id: data.broker_id,
           name: brokerType.charAt(0).toUpperCase() + brokerType.slice(1),
           status: 'connected',
-          connectedSince: new Date().toISOString().split('T')[0],
+          connectedSince: new Date().toLocaleDateString('en-IN', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric'
+          }),
           lastSync: 'Just now',
           holdings: 0,
           balance: 0,
@@ -353,7 +399,9 @@ const BrokerSettings = () => {
           todayTrades: 0,
           accountType: 'Regular',
           apiKey: apiKey ? `${apiKey.substring(0, 8)}...` : '',
-          apiSecret: '********'
+          apiSecret: '********',
+          isActive: true,
+          connectionHealth: 'pending'
         };
         
         setBrokerConnections(prev => [...prev, newBroker]);
@@ -362,11 +410,17 @@ const BrokerSettings = () => {
         // Clear API keys
         setApiKeys(prev => ({
           ...prev,
-          [brokerType]: { key: '', secret: '', userId: '', pin: '' }
+          [brokerType]: { api_key: '', api_secret: '', user_id: '', pin: '' }
         }));
         
         setActiveBroker(null);
-        alert('✅ Broker connected successfully!');
+        
+        // Test the connection immediately
+        setTimeout(() => {
+          handleTestConnection(newBroker.id);
+        }, 1000);
+        
+        alert('✅ Broker connected successfully! Syncing holdings...');
       } else {
         throw new Error(data.message || 'Connection failed');
       }
@@ -384,38 +438,61 @@ const BrokerSettings = () => {
       return;
     }
 
-    // In real app, this would call backend API
     handleConnectBroker(brokerId, apiKey, apiSecret, userId, pin);
   };
 
   const handleDisconnect = async (brokerId) => {
     if (window.confirm('Are you sure you want to disconnect this broker?\n\nYou will need to reconnect with API keys to access holdings.')) {
-      // In a real implementation, this would call backend API to disconnect
-      // For now, just remove from local state
-      
-      setBrokerConnections(prev => prev.map(broker => 
-        broker.id === brokerId 
-          ? { 
-              ...broker, 
-              status: 'disconnected',
-              holdings: 0,
-              balance: 0,
-              equity: 0,
-              profitLoss: '0',
-              todayTrades: 0,
-              lastSync: null,
-              connectedSince: null
-            }
-          : broker
-      ));
-      
-      // Clear stored API keys for this broker
-      setApiKeys(prev => ({
-        ...prev,
-        [brokerId]: { key: '', secret: '', userId: '', pin: '' }
-      }));
-      
-      alert('Broker disconnected successfully!');
+      try {
+        const token = getUserToken();
+        const response = await fetch(`${API_BASE_URL}/api/brokers/${brokerId}/disconnect`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            user_id: getUserId()
+          })
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success) {
+            // Update local state
+            setBrokerConnections(prev => prev.map(broker => 
+              broker.id === brokerId 
+                ? { 
+                    ...broker, 
+                    status: 'disconnected',
+                    holdings: 0,
+                    balance: 0,
+                    equity: 0,
+                    profitLoss: '0',
+                    todayTrades: 0,
+                    lastSync: null,
+                    connectedSince: null,
+                    isActive: false,
+                    connectionHealth: 'disconnected'
+                  }
+                : broker
+            ));
+            
+            // Clear stored API keys for this broker
+            setApiKeys(prev => ({
+              ...prev,
+              [brokerId]: { api_key: '', api_secret: '', user_id: '', pin: '' }
+            }));
+            
+            alert('✅ Broker disconnected successfully!');
+          }
+        } else {
+          throw new Error('Failed to disconnect broker');
+        }
+      } catch (error) {
+        console.error('Disconnect failed:', error);
+        alert('❌ Failed to disconnect broker. Please try again.');
+      }
     }
   };
 
@@ -428,27 +505,46 @@ const BrokerSettings = () => {
       [brokerId]: { ...prev[brokerId], isChecking: true }
     }));
 
-    // Test connection by pinging backend
     try {
-      const response = await fetch(`${API_BASE_URL}/api/health`);
-      const data = await response.json();
-      
-      const isSuccess = data.status === 'online';
-      
-      setConnectionStatus(prev => ({
-        ...prev,
-        [brokerId]: { 
-          ...prev[brokerId], 
-          isChecking: false,
-          lastChecked: new Date().toISOString(),
-          status: isSuccess ? 'success' : 'failed'
+      const token = getUserToken();
+      const response = await fetch(`${API_BASE_URL}/api/brokers/${brokerId}/test`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
         }
-      }));
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        
+        const isSuccess = data.connected || data.success;
+        
+        setConnectionStatus(prev => ({
+          ...prev,
+          [brokerId]: { 
+            ...prev[brokerId], 
+            isChecking: false,
+            lastChecked: new Date().toISOString(),
+            status: isSuccess ? 'success' : 'failed',
+            message: data.message
+          }
+        }));
 
-      if (isSuccess) {
-        alert(`✅ Connection to ${broker.name} successful!`);
+        // Update broker connection health
+        setBrokerConnections(prev => prev.map(b => 
+          b.id === brokerId 
+            ? { ...b, connectionHealth: isSuccess ? 'healthy' : 'unhealthy' }
+            : b
+        ));
+
+        if (isSuccess) {
+          alert(`✅ Connection to ${broker.name} successful!\n\n${data.message || 'Ready to sync holdings.'}`);
+        } else {
+          alert(`❌ Connection to ${broker.name} failed.\n\nReason: ${data.message || 'Please check API keys.'}`);
+        }
+        
+        return isSuccess;
       } else {
-        alert(`❌ Connection to ${broker.name} failed. Please check API keys.`);
+        throw new Error('Test request failed');
       }
     } catch (error) {
       setConnectionStatus(prev => ({
@@ -457,11 +553,38 @@ const BrokerSettings = () => {
           ...prev[brokerId], 
           isChecking: false,
           lastChecked: new Date().toISOString(),
-          status: 'failed'
+          status: 'failed',
+          message: error.message
         }
       }));
+      
+      // Update broker connection health
+      setBrokerConnections(prev => prev.map(b => 
+        b.id === brokerId 
+          ? { ...b, connectionHealth: 'unhealthy' }
+          : b
+      ));
+      
       alert(`❌ Connection test failed: ${error.message}`);
+      return false;
     }
+  };
+
+  const handleTestAllConnections = async () => {
+    const connectedBrokers = brokerConnections.filter(b => b.status === 'connected');
+    if (connectedBrokers.length === 0) {
+      alert('No connected brokers to test!');
+      return;
+    }
+    
+    const results = [];
+    for (const broker of connectedBrokers) {
+      const result = await handleTestConnection(broker.id);
+      results.push({ broker: broker.name, success: result });
+    }
+    
+    const successCount = results.filter(r => r.success).length;
+    alert(`Connection test results:\n✅ ${successCount} successful\n❌ ${connectedBrokers.length - successCount} failed`);
   };
 
   const handleExportHoldings = () => {
@@ -473,9 +596,9 @@ const BrokerSettings = () => {
     const data = selectedHoldings.length > 0 ? selectedHoldings : holdings;
     
     const csvContent = "data:text/csv;charset=utf-8," 
-      + "Stock,Quantity,Avg Price,Current Price,Invested,Current Value,P&L,P&L%,Broker\n"
+      + "Stock,Company,Quantity,Avg Price,Current Price,Invested,Current Value,P&L,P&L%,Broker\n"
       + data.map(h => 
-          `${h.symbol},${h.quantity || 0},${h.avgPrice || 0},${h.currentPrice || 0},${h.investedAmount || 0},${h.currentValue || 0},${h.pnl || 0},${h.pnlPercent || 0}%,${h.broker || 'Unknown'}`
+          `${h.symbol},${h.name},${h.quantity || 0},${h.avgPrice || 0},${h.currentPrice || 0},${h.investedAmount || 0},${h.currentValue || 0},${h.pnl || 0},${h.pnlPercent || 0}%,${h.broker || 'Unknown'}`
         ).join("\n");
     
     const encodedUri = encodeURI(csvContent);
@@ -488,7 +611,7 @@ const BrokerSettings = () => {
   };
 
   // Calculate totals
-  const connectedCount = brokerConnections.filter(b => b.status === 'connected').length;
+  const connectedCount = brokerConnections.filter(b => b.status === 'connected' && b.isActive).length;
   const totalHoldings = holdings.length;
   const totalBalance = brokerConnections.reduce((sum, broker) => sum + (broker.balance || 0), 0);
   const totalEquity = brokerConnections.reduce((sum, broker) => sum + (broker.equity || 0), 0);
@@ -547,18 +670,31 @@ const BrokerSettings = () => {
 
   if (loading) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-6 animate-pulse">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Broker Settings</h1>
-            <p className="text-gray-600">Loading broker connections...</p>
+            <div className="h-8 bg-gray-200 rounded w-48 mb-2"></div>
+            <div className="h-4 bg-gray-100 rounded w-64"></div>
           </div>
+          <div className="h-12 bg-gray-200 rounded-xl w-48"></div>
         </div>
-        <div className="flex justify-center items-center h-96">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-            <p className="mt-4 text-gray-600">Connecting to backend...</p>
-            <p className="text-sm text-gray-500">Fetching broker data from VeloxTradeAI</p>
+        
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {[1,2,3,4].map(i => (
+            <div key={i} className="bg-gray-100 rounded-xl p-5">
+              <div className="h-4 bg-gray-200 rounded w-32 mb-2"></div>
+              <div className="h-8 bg-gray-300 rounded w-24 mb-3"></div>
+              <div className="h-3 bg-gray-200 rounded w-40"></div>
+            </div>
+          ))}
+        </div>
+        
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="h-6 bg-gray-200 rounded w-32 mb-6"></div>
+          <div className="space-y-4">
+            {[1,2,3].map(i => (
+              <div key={i} className="h-16 bg-gray-100 rounded-lg"></div>
+            ))}
           </div>
         </div>
       </div>
@@ -573,13 +709,22 @@ const BrokerSettings = () => {
           <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Broker Settings</h1>
           <p className="text-gray-600">Connect and manage your trading accounts</p>
         </div>
-        <button 
-          onClick={() => setActiveBroker('select')}
-          className="flex items-center space-x-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-6 py-3 rounded-xl font-medium shadow-md hover:shadow-lg transition-all"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Connect New Broker</span>
-        </button>
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={() => loadBrokersAndHoldings()}
+            className="flex items-center space-x-2 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-xl font-medium hover:bg-gray-50 transition-all"
+          >
+            <RefreshCw className="w-4 h-4" />
+            <span>Refresh</span>
+          </button>
+          <button 
+            onClick={() => setActiveBroker('select')}
+            className="flex items-center space-x-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-6 py-2.5 rounded-xl font-medium shadow-md hover:shadow-lg transition-all"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Connect New Broker</span>
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -589,8 +734,14 @@ const BrokerSettings = () => {
             <p className="font-medium">{error}</p>
           </div>
           <p className="text-sm text-red-600 mt-2">
-            Make sure your backend is running at: {API_BASE_URL}
+            Backend URL: {API_BASE_URL}
           </p>
+          <button 
+            onClick={() => loadBrokersAndHoldings()}
+            className="mt-3 px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700"
+          >
+            Retry Connection
+          </button>
         </div>
       )}
 
@@ -608,7 +759,7 @@ const BrokerSettings = () => {
               </div>
             </div>
             <div className="mt-3 text-xs text-gray-500">
-              {brokerConnections.filter(b => b.status === 'disconnected').length} available to connect
+              {brokerConnections.length - connectedCount} disconnected
             </div>
           </div>
 
@@ -672,7 +823,7 @@ const BrokerSettings = () => {
             <p className="mb-2">Supported brokers:</p>
             <div className="flex flex-wrap justify-center gap-3">
               {Object.values(brokerConfigs).map((broker) => (
-                <span key={broker.name} className="px-3 py-1 bg-gray-100 text-gray-700 rounded-lg text-xs">
+                <span key={broker.name} className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-xs font-medium">
                   {broker.name}
                 </span>
               ))}
@@ -683,7 +834,7 @@ const BrokerSettings = () => {
 
       {/* Broker Connections Table - Only show if we have brokers */}
       {brokerConnections.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="p-6 border-b border-gray-200">
             <div className="flex items-center justify-between">
               <div>
@@ -691,7 +842,14 @@ const BrokerSettings = () => {
                 <p className="text-gray-600">Manage your broker connections and API keys</p>
               </div>
               {connectedCount > 0 && (
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-3">
+                  <button 
+                    onClick={handleTestAllConnections}
+                    className="flex items-center space-x-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm"
+                  >
+                    <Wifi className="w-4 h-4" />
+                    <span>Test All Connections</span>
+                  </button>
                   <button 
                     onClick={() => window.open('https://developers.kite.trade/', '_blank')}
                     className="text-sm text-blue-600 hover:text-blue-800 font-medium flex items-center"
@@ -735,18 +893,28 @@ const BrokerSettings = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {brokerConnections.map((broker) => (
+                  {brokerConnections.map((broker) => {
+                    const testResult = connectionTestResults[broker.id];
+                    const isHealthy = broker.connectionHealth === 'healthy' || (testResult && testResult.status === 'success');
+                    
+                    return (
                     <tr key={broker.id} className="border-b border-gray-100 hover:bg-gray-50/50">
                       <td className="py-4 px-6">
                         <div className="flex items-center space-x-3">
                           <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                            broker.status === 'connected' ? 'bg-blue-100' : 'bg-gray-100'
+                            broker.status === 'connected' ? 
+                              isHealthy ? 'bg-green-100' : 'bg-yellow-100' 
+                              : 'bg-gray-100'
                           }`}>
-                            <span className={`font-bold ${
-                              broker.status === 'connected' ? 'text-blue-600' : 'text-gray-400'
-                            }`}>
-                              {broker.name.charAt(0)}
-                            </span>
+                            {isHealthy && broker.status === 'connected' ? (
+                              <Wifi className="w-5 h-5 text-green-600" />
+                            ) : broker.status === 'connected' ? (
+                              <WifiOff className="w-5 h-5 text-yellow-600" />
+                            ) : (
+                              <span className="font-bold text-gray-400">
+                                {broker.name.charAt(0)}
+                              </span>
+                            )}
                           </div>
                           <div>
                             <div className="flex items-center space-x-2">
@@ -754,6 +922,11 @@ const BrokerSettings = () => {
                               <span className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded">
                                 {broker.accountType}
                               </span>
+                              {isHealthy && broker.status === 'connected' && (
+                                <span className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded">
+                                  Live
+                                </span>
+                              )}
                             </div>
                             <p className="text-sm text-gray-500">
                               {broker.status === 'connected' 
@@ -771,13 +944,17 @@ const BrokerSettings = () => {
                         <div className="flex items-center space-x-2">
                           <span className={`px-3 py-1 rounded-full text-xs font-medium ${
                             broker.status === 'connected'
-                              ? 'bg-green-100 text-green-800'
+                              ? isHealthy 
+                                ? 'bg-green-100 text-green-800' 
+                                : 'bg-yellow-100 text-yellow-800'
                               : 'bg-gray-100 text-gray-800'
                           }`}>
-                            {broker.status === 'connected' ? 'Connected' : 'Disconnected'}
+                            {broker.status === 'connected' ? 
+                              isHealthy ? 'Connected ✓' : 'Connection Issues' 
+                              : 'Disconnected'}
                           </span>
                           {connectionStatus[broker.id]?.isChecking && (
-                            <RefreshCw className="w-3 h-3 animate-spin text-gray-400" />
+                            <RefreshCw className="w-3 h-3 animate-spin text-blue-500" />
                           )}
                         </div>
                       </td>
@@ -821,6 +998,18 @@ const BrokerSettings = () => {
                           {broker.status === 'connected' ? (
                             <>
                               <button
+                                onClick={() => handleTestConnection(broker.id)}
+                                disabled={connectionStatus[broker.id]?.isChecking}
+                                className="p-2 text-green-600 hover:text-green-800 hover:bg-green-50 rounded-lg transition-colors"
+                                title="Test Connection"
+                              >
+                                {connectionStatus[broker.id]?.isChecking ? (
+                                  <RefreshCw className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <Wifi className="w-4 h-4" />
+                                )}
+                              </button>
+                              <button
                                 onClick={() => handleSync(broker.id)}
                                 disabled={isSyncing}
                                 className="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition-colors"
@@ -834,13 +1023,6 @@ const BrokerSettings = () => {
                                 title="Manage API Keys"
                               >
                                 <Settings className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => handleTestConnection(broker.id)}
-                                className="p-2 text-green-600 hover:text-green-800 hover:bg-green-50 rounded-lg transition-colors"
-                                title="Test Connection"
-                              >
-                                <CheckCircle className="w-4 h-4" />
                               </button>
                               <button
                                 onClick={() => handleDisconnect(broker.id)}
@@ -861,7 +1043,7 @@ const BrokerSettings = () => {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                  )})}
                 </tbody>
               </table>
             </div>
@@ -880,10 +1062,10 @@ const BrokerSettings = () => {
                   <button 
                     onClick={handleSyncAll}
                     disabled={isSyncing}
-                    className="flex items-center space-x-2 text-blue-600 hover:text-blue-800 font-medium disabled:opacity-50"
+                    className="flex items-center space-x-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-5 py-2.5 rounded-lg font-medium disabled:opacity-50"
                   >
                     <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
-                    <span>Sync All Brokers</span>
+                    <span>{isSyncing ? 'Syncing...' : 'Sync All Brokers'}</span>
                   </button>
                 )}
               </div>
@@ -1124,8 +1306,20 @@ const BrokerSettings = () => {
                           className="p-4 border border-gray-300 rounded-xl hover:border-blue-500 hover:bg-blue-50 text-left transition-all"
                         >
                           <div className="flex items-center space-x-3">
-                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center bg-${config.color}-100`}>
-                              <span className={`font-bold text-${config.color}-600`}>
+                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                              config.color === 'blue' ? 'bg-blue-100' :
+                              config.color === 'green' ? 'bg-green-100' :
+                              config.color === 'purple' ? 'bg-purple-100' :
+                              config.color === 'orange' ? 'bg-orange-100' :
+                              config.color === 'red' ? 'bg-red-100' : 'bg-gray-100'
+                            }`}>
+                              <span className={`font-bold ${
+                                config.color === 'blue' ? 'text-blue-600' :
+                                config.color === 'green' ? 'text-green-600' :
+                                config.color === 'purple' ? 'text-purple-600' :
+                                config.color === 'orange' ? 'text-orange-600' :
+                                config.color === 'red' ? 'text-red-600' : 'text-gray-600'
+                              }`}>
                                 {config.logo}
                               </span>
                             </div>
@@ -1159,10 +1353,10 @@ const BrokerSettings = () => {
                       <div className="flex items-center">
                         <input
                           type={showApiKeys ? "text" : "password"}
-                          value={apiKeys[activeBroker]?.key || ''}
+                          value={apiKeys[activeBroker]?.api_key || ''}
                           onChange={(e) => setApiKeys(prev => ({
                             ...prev,
-                            [activeBroker]: { ...prev[activeBroker], key: e.target.value }
+                            [activeBroker]: { ...prev[activeBroker], api_key: e.target.value }
                           }))}
                           className="flex-1 border border-gray-300 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                           placeholder="Enter API Key"
@@ -1182,10 +1376,10 @@ const BrokerSettings = () => {
                       <div className="flex items-center">
                         <input
                           type={showApiKeys ? "text" : "password"}
-                          value={apiKeys[activeBroker]?.secret || ''}
+                          value={apiKeys[activeBroker]?.api_secret || ''}
                           onChange={(e) => setApiKeys(prev => ({
                             ...prev,
-                            [activeBroker]: { ...prev[activeBroker], secret: e.target.value }
+                            [activeBroker]: { ...prev[activeBroker], api_secret: e.target.value }
                           }))}
                           className="flex-1 border border-gray-300 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                           placeholder="Enter API Secret"
@@ -1198,10 +1392,10 @@ const BrokerSettings = () => {
                         <label className="block text-sm font-medium text-gray-700 mb-2">User ID / Client ID</label>
                         <input
                           type="text"
-                          value={apiKeys[activeBroker]?.userId || ''}
+                          value={apiKeys[activeBroker]?.user_id || ''}
                           onChange={(e) => setApiKeys(prev => ({
                             ...prev,
-                            [activeBroker]: { ...prev[activeBroker], userId: e.target.value }
+                            [activeBroker]: { ...prev[activeBroker], user_id: e.target.value }
                           }))}
                           className="w-full border border-gray-300 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                           placeholder="Enter User ID / Client ID"
@@ -1270,12 +1464,12 @@ const BrokerSettings = () => {
                       <button
                         onClick={() => handleSaveApiKeys(
                           activeBroker,
-                          apiKeys[activeBroker]?.key,
-                          apiKeys[activeBroker]?.secret,
-                          apiKeys[activeBroker]?.userId,
+                          apiKeys[activeBroker]?.api_key,
+                          apiKeys[activeBroker]?.api_secret,
+                          apiKeys[activeBroker]?.user_id,
                           apiKeys[activeBroker]?.pin
                         )}
-                        disabled={!apiKeys[activeBroker]?.key || !apiKeys[activeBroker]?.secret}
+                        disabled={!apiKeys[activeBroker]?.api_key || !apiKeys[activeBroker]?.api_secret}
                         className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white py-3 px-4 rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {brokerConnections.find(b => b.id === activeBroker)?.status === 'connected' 
