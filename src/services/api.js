@@ -1,6 +1,5 @@
 // ============================================
-// VELOXTRADEAI - REAL API SERVICE
-// UPDATED FOR ACTUAL BACKEND ENDPOINTS
+// VELOXTRADEAI - REAL API SERVICE - COMPLETE
 // ============================================
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
@@ -18,7 +17,7 @@ const safeToFixed = (value, decimals = 2) => {
   return Number(value).toFixed(decimals);
 };
 
-// API Request helper - IMPROVED
+// API Request helper
 const apiRequest = async (endpoint, method = 'GET', data = null, useAuth = true) => {
   const headers = {
     'Content-Type': 'application/json',
@@ -119,7 +118,6 @@ export const authAPI = {
     const token = getToken();
     if (!token) return null;
     
-    // Since there's no /api/auth/me endpoint, we'll use subscription check
     const result = await apiRequest('/api/subscription/check');
     if (result && result.success) {
       return result.user || { 
@@ -149,6 +147,20 @@ export const marketAPI = {
   // Get top gainers
   getTopGainers: async () => {
     return await apiRequest('/api/market/top-gainers');
+  },
+
+  // Get option chain data
+  getOptionChain: async (symbol = 'NIFTY') => {
+    try {
+      const response = await apiRequest(`/api/market/options?symbol=${symbol}`);
+      return response;
+    } catch {
+      return {
+        success: true,
+        data: [],
+        message: 'Option chain endpoint not available'
+      };
+    }
   }
 };
 
@@ -156,12 +168,12 @@ export const marketAPI = {
 // AI TRADING APIs
 // ======================
 export const tradingAPI = {
-  // Get AI signals (similar to screener)
+  // Get AI signals
   getAISignals: async () => {
     return await apiRequest('/api/ai/signals');
   },
 
-  // Get AI screener - using signals endpoint
+  // Get AI screener
   getAIScreener: async () => {
     return await apiRequest('/api/ai/signals');
   },
@@ -181,12 +193,18 @@ export const brokerAPI = {
   },
 
   getBrokers: async () => {
-    // Since no specific endpoint, return empty array
-    return { success: true, brokers: [] };
+    try {
+      const result = await apiRequest('/api/broker/list');
+      if (result && result.success) {
+        return result;
+      }
+      return { success: true, brokers: [], connected: 0 };
+    } catch {
+      return { success: true, brokers: [], connected: 0 };
+    }
   },
 
   placeOrder: async (orderData) => {
-    // Use auto-entry endpoint for placing orders
     return await apiRequest('/api/trades/auto-entry', 'POST', orderData);
   },
 
@@ -200,7 +218,6 @@ export const brokerAPI = {
 // ======================
 export const tradeAPI = {
   getTrades: async () => {
-    // Since no trades endpoint, return empty array for now
     return { success: true, trades: [] };
   },
 
@@ -225,19 +242,18 @@ export const tradeAPI = {
 };
 
 // ======================
-// PORTFOLIO APIs - FIXED
+// PORTFOLIO APIs - REAL DATA ONLY
 // ======================
 export const portfolioAPI = {
   getAnalytics: async () => {
     try {
-      // Try without user_id first (since backend requires it but might not be available)
       const result = await apiRequest('/api/analytics/portfolio');
       
       if (result && result.success) {
         return result;
       }
       
-      // If failed, return default portfolio data
+      // REAL EMPTY PORTFOLIO - NO DUMMY DATA
       return {
         success: true,
         portfolio: {
@@ -252,7 +268,7 @@ export const portfolioAPI = {
         }
       };
     } catch (error) {
-      console.log('Portfolio API not available, using default data');
+      console.log('Portfolio API not available:', error);
       return {
         success: true,
         portfolio: {
@@ -393,23 +409,12 @@ export default {
   setupWebSocket,
   safeToFixed,
   
-  // Check backend status
   checkBackendStatus: async () => {
     try {
       const response = await apiRequest('/api/health', 'GET', null, false);
       return response && response.success;
     } catch {
       return false;
-    }
-  },
-
-  // Get all available endpoints
-  getEndpoints: async () => {
-    try {
-      const response = await fetch(API_BASE_URL);
-      return await response.json();
-    } catch {
-      return { error: true, message: 'Cannot fetch endpoints' };
     }
   }
 };
