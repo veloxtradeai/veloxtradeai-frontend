@@ -93,69 +93,40 @@ const Dashboard = () => {
   };
 
   // FIXED: Simplified real data fetch - only essential calls
-  const fetchRealData = useCallback(async () => {
-    try {
-      console.log('🔄 Fetching real data...');
-      
-      // 1. First check backend health
-      const healthResponse = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/health`);
-      const healthData = await healthResponse.json();
-      
-      if (healthResponse.ok && healthData.status === 'online') {
-        setIsBackendConnected(true);
-        setConnectionStatus(prev => ({ ...prev, api: true }));
-        
-        // 2. Try to get market data
-        try {
-          const marketResponse = await marketAPI.getLiveData();
-          if (marketResponse && marketResponse.success) {
-            console.log('✅ Market data loaded');
-          }
-        } catch (marketError) {
-          console.log('⚠️ Market data not available');
-        }
-        
-        // 3. Try portfolio data (with fallback)
-        try {
-          const portfolioResponse = await portfolioAPI.getAnalytics();
-          if (portfolioResponse && portfolioResponse.success && portfolioResponse.portfolio) {
-            setRealPortfolio({
-              totalValue: portfolioResponse.portfolio.totalValue || 0,
-              dailyPnL: portfolioResponse.portfolio.dailyPnL || 0,
-              winRate: portfolioResponse.portfolio.winRate || '0%',
-              activeTrades: portfolioResponse.portfolio.activeTrades || 0,
-              holdingsCount: portfolioResponse.portfolio.holdingsCount || 0,
-              investedValue: portfolioResponse.portfolio.investedValue || 0,
-              returnsPercent: portfolioResponse.portfolio.returnsPercent || 0
-            });
-          }
-        } catch (portfolioError) {
-          console.log('⚠️ Portfolio endpoint not working');
-          // Use hook's portfolio stats as fallback
-          setRealPortfolio({
-            totalValue: portfolioStats.currentValue || 0,
-            dailyPnL: portfolioStats.dailyPnL || 0,
-            winRate: portfolioStats.winRate || '0%',
-            activeTrades: portfolioStats.activeTrades || 0,
-            holdingsCount: portfolioStats.holdingsCount || 0,
-            investedValue: portfolioStats.investedValue || 0,
-            returnsPercent: portfolioStats.returnsPercent || 0
-          });
-        }
-      } else {
-        setIsBackendConnected(false);
-        setConnectionStatus({ broker: false, websocket: false, api: false });
-      }
-      
-      setLastUpdate(new Date());
-      
-    } catch (error) {
-      console.error('❌ Real data fetch error:', error);
-      setIsBackendConnected(false);
-      setConnectionStatus({ broker: false, websocket: false, api: false });
-    }
-  }, [portfolioStats]);
+// Dashboard.jsx में fetchRealData function update करो:
 
+const fetchRealData = useCallback(async () => {
+  try {
+    console.log('🔄 Fetching real data...');
+    
+    // 1. Backend health check
+    const healthResponse = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/health`);
+    const healthData = await healthResponse.json();
+    
+    if (healthResponse.ok && healthData.status === 'online') {
+      setIsBackendConnected(true);
+      setConnectionStatus(prev => ({ ...prev, api: true }));
+      
+      // 2. Portfolio data लो
+      try {
+        const portfolioResponse = await portfolioAPI.getAnalytics();
+        if (portfolioResponse && portfolioResponse.success) {
+          console.log('✅ Portfolio data loaded');
+          // यहाँ portfolio data सेट करो
+        }
+      } catch (portfolioError) {
+        console.log('⚠️ Portfolio endpoint not available');
+      }
+    }
+    
+    setLastUpdate(new Date());
+    
+  } catch (error) {
+    console.error('❌ Real data fetch error:', error);
+    setIsBackendConnected(false);
+  }
+}, []);
+  
   // AUTO REFRESH AND DATA FETCH
   useEffect(() => {
     fetchRealData();
