@@ -148,7 +148,7 @@ export const marketAPI = {
 
   // Get top gainers
   getTopGainers: async () => {
-    return await apiRequest('/api/market/top_gainers');
+    return await apiRequest('/api/market/top-gainers');
   }
 };
 
