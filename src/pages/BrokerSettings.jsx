@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import BrokerSelector from '../components/BrokerSelector';
 import { 
   Link, 
@@ -21,22 +21,41 @@ import {
   Settings,
   Wallet,
   TrendingUp,
-  TrendingDown
+  TrendingDown,
+  X,
+  ChevronDown,
+  ChevronUp,
+  BarChart3,
+  DollarSign,
+  Target,
+  Clock,
+  Wifi,
+  WifiOff,
+  Lock,
+  Globe,
+  ShieldCheck,
+  AlertTriangle,
+  Zap
 } from 'lucide-react';
+import { useLanguage } from '../contexts/LanguageContext';
 
-// API Configuration
-const API_BASE_URL = 'https://veloxtradeai-api.velox-trade-ai.workers.dev';
+// API Configuration - Use environment variable
+const API_BASE_URL = import.meta.env?.VITE_API_BASE_URL || 'https://your-backend-api.com';
 
 const BrokerSettings = () => {
+  const { t, isHindi, language } = useLanguage();
+  
   const [brokers, setBrokers] = useState([]);
   const [holdings, setHoldings] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [activeBroker, setActiveBroker] = useState(null);
   const [showApiKeys, setShowApiKeys] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState({});
   const [selectedHoldings, setSelectedHoldings] = useState([]);
+  const [isBackendConnected, setIsBackendConnected] = useState(false);
+  const [connectionTestResult, setConnectionTestResult] = useState(null);
   
   const [apiKeys, setApiKeys] = useState({
     zerodha: { key: '', secret: '', userId: '', pin: '', totp: '' },
@@ -56,182 +75,166 @@ const BrokerSettings = () => {
     todayPnl: 0
   });
 
-  // Get user ID from localStorage or auth context
-  const getUserId = () => {
-    const userData = JSON.parse(localStorage.getItem('user_data') || '{}');
-    return userData.user_id || 'demo-user-123';
-  };
-
-  const getUserToken = () => {
-    const userData = JSON.parse(localStorage.getItem('user_data') || '{}');
-    return userData.token || '';
-  };
-
-  // Load brokers from backend
-  useEffect(() => {
-    loadBrokersAndHoldings();
+  // FIXED: Safer formatCurrency
+  const formatCurrency = useCallback((amount) => {
+    if (amount === undefined || amount === null || amount === '') {
+      return '₹0';
+    }
+    try {
+      const num = parseFloat(amount);
+      if (isNaN(num)) return '₹0';
+      
+      return `₹${num.toLocaleString('en-IN', { 
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2 
+      })}`;
+    } catch (error) {
+      console.error('formatCurrency error:', error);
+      return '₹0';
+    }
   }, []);
 
-  const loadBrokersAndHoldings = async () => {
+  // FIXED: Safer safeToFixed
+  const safeToFixed = useCallback((value, decimals = 2) => {
+    if (value === undefined || value === null || value === '' || isNaN(Number(value))) {
+      return '0.00';
+    }
+    return Number(value).toFixed(decimals);
+  }, []);
+
+  // FIXED: Get user ID from localStorage or auth context
+  const getUserId = useCallback(() => {
+    try {
+      const userData = JSON.parse(localStorage.getItem('user_data') || '{}');
+      return userData.user_id || 'default-user-123';
+    } catch (error) {
+      return 'default-user-123';
+    }
+  }, []);
+
+  const getUserToken = useCallback(() => {
+    try {
+      const userData = JSON.parse(localStorage.getItem('user_data') || '{}');
+      return userData.token || '';
+    } catch (error) {
+      return '';
+    }
+  }, []);
+
+  // REAL DATA FETCH - NO DUMMY
+  const loadBrokersAndHoldings = useCallback(async () => {
     setLoading(true);
     setError(null);
     
     try {
+      console.log('🔗 Loading broker connections...');
+      
+      // Check backend connection first
+      const healthResponse = await fetch(`${API_BASE_URL}/api/health`);
+      if (!healthResponse.ok) {
+        throw new Error('Backend connection failed');
+      }
+      
+      setIsBackendConnected(true);
       const userId = getUserId();
       
-      // 1. Fetch broker connections
-      const brokersRes = await fetch(`${API_BASE_URL}/api/broker/data?user_id=${userId}`);
-      const brokersData = await brokersRes.json();
-      
-      if (brokersData.success) {
-        setBrokers(brokersData.brokers || []);
-        setBrokerConnections(brokersData.brokers.map(broker => ({
-          id: broker.id,
-          name: broker.broker_name,
-          status: broker.is_active ? 'connected' : 'disconnected',
-          connectedSince: broker.connected_at ? new Date(broker.connected_at).toLocaleDateString('en-IN') : null,
-          lastSync: broker.last_sync || null,
-          holdings: 0, // Will be updated from holdings
-          balance: 0,
-          equity: 0,
-          profitLoss: '0',
-          todayTrades: 0,
-          accountType: broker.account_type || 'Regular',
-          apiKey: broker.api_key ? `${broker.api_key.substring(0, 8)}...` : '',
-          apiSecret: broker.api_secret ? '********' : ''
-        })));
-      }
-
-      // 2. Fetch holdings (from trades table)
-      const tradesRes = await fetch(`${API_BASE_URL}/api/trades?user_id=${userId}`);
-      const tradesData = await tradesRes.json();
-      
-      if (tradesData.success) {
-        const openTrades = tradesData.trades.filter(trade => trade.status === 'open');
-        setHoldings(openTrades.map(trade => {
-          const currentValue = trade.entry_price * trade.quantity * 1.02; // Assume 2% gain
-          const pnl = currentValue - (trade.entry_price * trade.quantity);
-          const pnlPercent = (trade.entry_price * trade.quantity) > 0 ? 
-            (pnl / (trade.entry_price * trade.quantity)) * 100 : 0;
-          
-          return {
-            symbol: trade.symbol,
-            name: trade.symbol, // Could be mapped to actual names
-            quantity: trade.quantity || 0,
-            avgPrice: trade.entry_price || 0,
-            currentPrice: trade.entry_price * 1.02, // Assume 2% up
-            investedAmount: trade.entry_price * trade.quantity,
-            currentValue: currentValue,
-            pnl: pnl,
-            pnlPercent: pnlPercent,
-            broker: 'Zerodha', // Default for now
-            tradeId: trade.id,
-            status: trade.status
-          };
-        }));
-        
-        // Calculate portfolio stats
-        const totalInvestment = openTrades.reduce((sum, trade) => 
-          sum + (trade.entry_price * trade.quantity), 0);
-        const totalCurrentValue = openTrades.reduce((sum, trade) => 
-          sum + (trade.entry_price * trade.quantity * 1.02), 0);
-        const totalPnl = totalCurrentValue - totalInvestment;
-        const totalPnlPercent = totalInvestment > 0 ? (totalPnl / totalInvestment) * 100 : 0;
-        
-        setPortfolioStats({
-          totalInvestment,
-          currentValue: totalCurrentValue,
-          totalPnl,
-          totalPnlPercent,
-          todayPnl: totalPnl * 0.1 // Assume 10% of total is today's P&L
+      // 1. Fetch broker connections from API
+      try {
+        const brokersRes = await fetch(`${API_BASE_URL}/api/brokers?user_id=${userId}`, {
+          headers: {
+            'Authorization': `Bearer ${getUserToken()}`
+          }
         });
         
-        // Update holdings count in broker connections
-        setBrokerConnections(prev => prev.map(broker => ({
-          ...broker,
-          holdings: openTrades.filter(t => !broker.name || broker.name === 'Zerodha').length,
-          balance: 10000, // Mock available balance
-          equity: totalCurrentValue * 0.5, // Mock equity
-          profitLoss: totalPnl >= 0 ? `+₹${Math.round(totalPnl).toLocaleString()}` : `-₹${Math.round(Math.abs(totalPnl)).toLocaleString()}`
-        })));
+        if (brokersRes.ok) {
+          const brokersData = await brokersRes.json();
+          
+          if (brokersData?.success) {
+            setBrokers(brokersData.brokers || []);
+            
+            const connections = (brokersData.brokers || []).map(broker => ({
+              id: broker.id || broker.broker_name?.toLowerCase() || 'unknown',
+              name: broker.broker_name || 'Unknown',
+              status: broker.is_active ? 'connected' : 'disconnected',
+              connectedSince: broker.connected_at ? new Date(broker.connected_at).toLocaleDateString('en-IN') : null,
+              lastSync: broker.last_sync || null,
+              holdings: broker.holdings_count || 0,
+              balance: broker.balance || 0,
+              equity: broker.equity || 0,
+              profitLoss: broker.profit_loss || '0',
+              todayTrades: broker.today_trades || 0,
+              accountType: broker.account_type || 'Regular',
+              apiKey: broker.api_key ? `${broker.api_key.substring(0, 8)}...` : '',
+              apiSecret: broker.api_secret ? '********' : ''
+            }));
+            
+            setBrokerConnections(connections);
+            console.log('✅ Broker connections loaded');
+          }
+        }
+      } catch (brokerError) {
+        console.log('⚠️ Broker endpoint not available');
+      }
+
+      // 2. Fetch holdings from API
+      try {
+        const holdingsRes = await fetch(`${API_BASE_URL}/api/holdings?user_id=${userId}`, {
+          headers: {
+            'Authorization': `Bearer ${getUserToken()}`
+          }
+        });
+        
+        if (holdingsRes.ok) {
+          const holdingsData = await holdingsRes.json();
+          
+          if (holdingsData?.success) {
+            const holdingsList = holdingsData.holdings || holdingsData.data || [];
+            setHoldings(holdingsList);
+            
+            // Calculate portfolio stats
+            const totalInvestment = holdingsList.reduce((sum, h) => sum + (h.invested_amount || 0), 0);
+            const totalCurrentValue = holdingsList.reduce((sum, h) => sum + (h.current_value || 0), 0);
+            const totalPnl = holdingsList.reduce((sum, h) => sum + (h.pnl || 0), 0);
+            const totalPnlPercent = totalInvestment > 0 ? (totalPnl / totalInvestment) * 100 : 0;
+            
+            setPortfolioStats({
+              totalInvestment,
+              currentValue: totalCurrentValue,
+              totalPnl,
+              totalPnlPercent,
+              todayPnl: holdingsList.reduce((sum, h) => sum + (h.today_pnl || 0), 0)
+            });
+            
+            console.log('✅ Holdings data loaded');
+          }
+        }
+      } catch (holdingsError) {
+        console.log('⚠️ Holdings endpoint not available');
       }
       
     } catch (error) {
-      console.error('Failed to load broker data:', error);
-      setError('Failed to connect to backend. Please check your connection.');
-      // Load mock data as fallback
-      loadMockData();
+      console.error('❌ Failed to load broker data:', error);
+      setError(isHindi ? 'बैकेंड कनेक्शन में समस्या। कृपया कनेक्शन चेक करें।' : 'Failed to connect to backend. Please check your connection.');
+      setIsBackendConnected(false);
     } finally {
       setLoading(false);
     }
-  };
+  }, [getUserId, getUserToken, isHindi]);
 
-  const loadMockData = () => {
-    // Mock broker connections
-    const mockBrokers = [
-      {
-        id: 'broker-1',
-        name: 'Zerodha',
-        status: 'connected',
-        connectedSince: '2024-01-15',
-        lastSync: '15:45',
-        holdings: 8,
-        balance: 125000,
-        equity: 285000,
-        profitLoss: '+₹12,500',
-        todayTrades: 3,
-        accountType: 'Regular',
-        apiKey: 'XK8H2D...',
-        apiSecret: '********'
-      },
-      {
-        id: 'broker-2',
-        name: 'Groww',
-        status: 'connected',
-        connectedSince: '2024-02-01',
-        lastSync: '14:20',
-        holdings: 5,
-        balance: 75000,
-        equity: 185000,
-        profitLoss: '+₹8,250',
-        todayTrades: 2,
-        accountType: 'Regular',
-        apiKey: 'GRW9A3...',
-        apiSecret: '********'
-      }
-    ];
+  // Load brokers on component mount
+  useEffect(() => {
+    loadBrokersAndHoldings();
     
-    setBrokerConnections(mockBrokers);
-    setBrokers(mockBrokers);
-    
-    // Mock holdings
-    const mockHoldings = [
-      { symbol: 'RELIANCE', name: 'Reliance Industries', quantity: 10, avgPrice: 2850, currentPrice: 2925, investedAmount: 28500, currentValue: 29250, pnl: 750, pnlPercent: 2.63, broker: 'Zerodha', todayPnl: 125 },
-      { symbol: 'TCS', name: 'Tata Consultancy Services', quantity: 15, avgPrice: 3750, currentPrice: 3825, investedAmount: 56250, currentValue: 57375, pnl: 1125, pnlPercent: 2.0, broker: 'Zerodha', todayPnl: 225 },
-      { symbol: 'HDFCBANK', name: 'HDFC Bank', quantity: 20, avgPrice: 1650, currentPrice: 1683, investedAmount: 33000, currentValue: 33660, pnl: 660, pnlPercent: 2.0, broker: 'Groww', todayPnl: 132 },
-      { symbol: 'INFY', name: 'Infosys', quantity: 25, avgPrice: 1500, currentPrice: 1522, investedAmount: 37500, currentValue: 38050, pnl: 550, pnlPercent: 1.47, broker: 'Groww', todayPnl: 110 },
-      { symbol: 'ICICIBANK', name: 'ICICI Bank', quantity: 30, avgPrice: 1100, currentPrice: 1122, investedAmount: 33000, currentValue: 33660, pnl: 660, pnlPercent: 2.0, broker: 'Zerodha', todayPnl: 132 }
-    ];
-    
-    setHoldings(mockHoldings);
-    
-    // Calculate portfolio stats
-    const totalInvestment = mockHoldings.reduce((sum, h) => sum + h.investedAmount, 0);
-    const totalCurrentValue = mockHoldings.reduce((sum, h) => sum + h.currentValue, 0);
-    const totalPnl = mockHoldings.reduce((sum, h) => sum + h.pnl, 0);
-    const totalPnlPercent = totalInvestment > 0 ? (totalPnl / totalInvestment) * 100 : 0;
-    const todayPnl = mockHoldings.reduce((sum, h) => sum + (h.todayPnl || 0), 0);
-    
-    setPortfolioStats({
-      totalInvestment,
-      currentValue: totalCurrentValue,
-      totalPnl,
-      totalPnlPercent,
-      todayPnl
-    });
-  };
+    // Auto-refresh every 2 minutes
+    const interval = setInterval(() => {
+      loadBrokersAndHoldings();
+    }, 120000);
 
-  const syncHoldings = async (brokerId) => {
+    return () => clearInterval(interval);
+  }, [loadBrokersAndHoldings]);
+
+  // Sync holdings function
+  const syncHoldings = useCallback(async (brokerId) => {
     setIsSyncing(true);
     try {
       const userId = getUserId();
@@ -241,57 +244,72 @@ const BrokerSettings = () => {
         throw new Error('Broker not found');
       }
       
-      // In a real implementation, this would call broker API
-      // For now, simulate syncing by updating lastSync time
+      // Call sync API
+      const syncRes = await fetch(`${API_BASE_URL}/api/brokers/${brokerId}/sync`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${getUserToken()}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ user_id: userId })
+      });
       
-      // Update broker connection
-      setBrokerConnections(prev => prev.map(b => 
-        b.id === brokerId 
-          ? { 
-              ...b, 
-              lastSync: new Date().toLocaleTimeString('en-IN', { 
-                hour: '2-digit', 
-                minute: '2-digit'
-              }),
-              holdings: Math.min(b.holdings + 2, 15) // Mock increase
-            }
-          : b
-      ));
-      
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      return { success: true, message: 'Holdings synced successfully' };
+      if (syncRes.ok) {
+        const result = await syncRes.json();
+        
+        // Update broker connection with new data
+        setBrokerConnections(prev => prev.map(b => 
+          b.id === brokerId 
+            ? { 
+                ...b, 
+                lastSync: new Date().toLocaleTimeString('en-IN', { 
+                  hour: '2-digit', 
+                  minute: '2-digit'
+                }),
+                holdings: result.holdings_count || b.holdings,
+                balance: result.balance || b.balance,
+                equity: result.equity || b.equity
+              }
+            : b
+        ));
+        
+        return { success: true, message: 'Holdings synced successfully' };
+      } else {
+        throw new Error('Sync failed');
+      }
     } catch (error) {
       console.error('Sync failed:', error);
       throw error;
     } finally {
       setIsSyncing(false);
     }
-  };
+  }, [brokerConnections, getUserId, getUserToken]);
 
-  const handleSync = async (brokerId) => {
+  // Handle sync button click
+  const handleSync = useCallback(async (brokerId) => {
     if (!brokerId) return;
     
     setIsSyncing(true);
     try {
       await syncHoldings(brokerId);
       
-      // Show success
       const brokerName = brokerConnections.find(b => b.id === brokerId)?.name;
-      alert(`✅ ${brokerName} holdings synced successfully!`);
+      alert(isHindi ? `✅ ${brokerName} होल्डिंग्स सिंक हुईं!` : `✅ ${brokerName} holdings synced successfully!`);
+      
+      // Refresh data
+      loadBrokersAndHoldings();
     } catch (error) {
       console.error('Sync failed:', error);
-      alert(`❌ Sync failed: ${error.message || 'Please check your connection'}`);
+      alert(isHindi ? `❌ सिंक फेल: ${error.message || 'कृपया कनेक्शन चेक करें'}` : `❌ Sync failed: ${error.message || 'Please check your connection'}`);
     } finally {
       setIsSyncing(false);
     }
-  };
+  }, [syncHoldings, brokerConnections, loadBrokersAndHoldings, isHindi]);
 
-  const handleSyncAll = async () => {
+  const handleSyncAll = useCallback(async () => {
     const connectedBrokers = brokerConnections.filter(b => b.status === 'connected');
     if (connectedBrokers.length === 0) {
-      alert('No connected brokers to sync!');
+      alert(isHindi ? 'कोई कनेक्टेड ब्रोकर नहीं है!' : 'No connected brokers to sync!');
       return;
     }
     
@@ -305,22 +323,24 @@ const BrokerSettings = () => {
         }
       }
       
-      alert(`✅ ${connectedBrokers.length} broker(s) synced successfully!`);
+      alert(isHindi ? `✅ ${connectedBrokers.length} ब्रोकर सिंक हुए!` : `✅ ${connectedBrokers.length} broker(s) synced successfully!`);
+      loadBrokersAndHoldings();
     } catch (error) {
       console.error('Sync all failed:', error);
-      alert('❌ Some brokers failed to sync');
+      alert(isHindi ? '❌ कुछ ब्रोकर सिंक नहीं हुए' : '❌ Some brokers failed to sync');
     } finally {
       setIsSyncing(false);
     }
-  };
+  }, [brokerConnections, syncHoldings, loadBrokersAndHoldings, isHindi]);
 
-  const handleConnectBroker = async (brokerType, apiKey, apiSecret, userId, pin) => {
+  // Handle broker connection
+  const handleConnectBroker = useCallback(async (brokerType, apiKey, apiSecret, userId, pin) => {
     setLoading(true);
     
     try {
       const currentUserId = getUserId();
       
-      const response = await fetch(`${API_BASE_URL}/api/broker/connect`, {
+      const response = await fetch(`${API_BASE_URL}/api/brokers/connect`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -338,14 +358,13 @@ const BrokerSettings = () => {
       
       const data = await response.json();
       
-      if (data.success) {
-        // Add new broker to connections
+      if (data?.success) {
         const newBroker = {
-          id: data.broker_id,
+          id: data.broker_id || brokerType,
           name: brokerType.charAt(0).toUpperCase() + brokerType.slice(1),
           status: 'connected',
           connectedSince: new Date().toISOString().split('T')[0],
-          lastSync: 'Just now',
+          lastSync: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
           holdings: 0,
           balance: 0,
           equity: 0,
@@ -366,60 +385,74 @@ const BrokerSettings = () => {
         }));
         
         setActiveBroker(null);
-        alert('✅ Broker connected successfully!');
+        alert(isHindi ? '✅ ब्रोकर कनेक्ट हो गया!' : '✅ Broker connected successfully!');
       } else {
-        throw new Error(data.message || 'Connection failed');
+        throw new Error(data?.message || 'Connection failed');
       }
     } catch (error) {
       console.error('Connection failed:', error);
-      alert(`❌ Connection failed: ${error.message || 'Please check your API keys'}`);
+      alert(isHindi ? `❌ कनेक्शन फेल: ${error.message || 'कृपया API keys चेक करें'}` : `❌ Connection failed: ${error.message || 'Please check your API keys'}`);
     } finally {
       setLoading(false);
     }
-  };
+  }, [getUserId, getUserToken, isHindi]);
 
   const handleSaveApiKeys = (brokerId, apiKey, apiSecret, userId = '', pin = '') => {
     if (!apiKey.trim() || !apiSecret.trim()) {
-      alert('Please enter both API Key and API Secret');
+      alert(isHindi ? 'कृपया API Key और API Secret दोनों डालें' : 'Please enter both API Key and API Secret');
       return;
     }
 
-    // In real app, this would call backend API
     handleConnectBroker(brokerId, apiKey, apiSecret, userId, pin);
   };
 
-  const handleDisconnect = async (brokerId) => {
-    if (window.confirm('Are you sure you want to disconnect this broker?\n\nYou will need to reconnect with API keys to access holdings.')) {
-      // In a real implementation, this would call backend API to disconnect
-      // For now, just remove from local state
-      
-      setBrokerConnections(prev => prev.map(broker => 
-        broker.id === brokerId 
-          ? { 
-              ...broker, 
-              status: 'disconnected',
-              holdings: 0,
-              balance: 0,
-              equity: 0,
-              profitLoss: '0',
-              todayTrades: 0,
-              lastSync: null,
-              connectedSince: null
-            }
-          : broker
-      ));
-      
-      // Clear stored API keys for this broker
-      setApiKeys(prev => ({
-        ...prev,
-        [brokerId]: { key: '', secret: '', userId: '', pin: '' }
-      }));
-      
-      alert('Broker disconnected successfully!');
+  const handleDisconnect = useCallback(async (brokerId) => {
+    if (window.confirm(isHindi ? 'क्या आप वाकई इस ब्रोकर को डिस्कनेक्ट करना चाहते हैं?\n\nहोल्डिंग्स एक्सेस के लिए आपको API keys से फिर से कनेक्ट करना होगा।' : 'Are you sure you want to disconnect this broker?\n\nYou will need to reconnect with API keys to access holdings.')) {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/brokers/${brokerId}/disconnect`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${getUserToken()}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ user_id: getUserId() })
+        });
+        
+        if (response.ok) {
+          setBrokerConnections(prev => prev.map(broker => 
+            broker.id === brokerId 
+              ? { 
+                  ...broker, 
+                  status: 'disconnected',
+                  holdings: 0,
+                  balance: 0,
+                  equity: 0,
+                  profitLoss: '0',
+                  todayTrades: 0,
+                  lastSync: null,
+                  connectedSince: null
+                }
+              : broker
+          ));
+          
+          // Clear stored API keys for this broker
+          setApiKeys(prev => ({
+            ...prev,
+            [brokerId]: { key: '', secret: '', userId: '', pin: '' }
+          }));
+          
+          alert(isHindi ? 'ब्रोकर डिस्कनेक्ट हो गया!' : 'Broker disconnected successfully!');
+        } else {
+          throw new Error('Disconnect failed');
+        }
+      } catch (error) {
+        console.error('Disconnect failed:', error);
+        alert(isHindi ? '❌ डिस्कनेक्ट फेल' : '❌ Disconnect failed');
+      }
     }
-  };
+  }, [getUserId, getUserToken, isHindi]);
 
-  const handleTestConnection = async (brokerId) => {
+  const handleTestConnection = useCallback(async (brokerId) => {
     const broker = brokerConnections.find(b => b.id === brokerId);
     if (!broker) return;
 
@@ -428,12 +461,22 @@ const BrokerSettings = () => {
       [brokerId]: { ...prev[brokerId], isChecking: true }
     }));
 
-    // Test connection by pinging backend
     try {
-      const response = await fetch(`${API_BASE_URL}/api/health`);
+      const response = await fetch(`${API_BASE_URL}/api/brokers/${brokerId}/test`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${getUserToken()}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ 
+          user_id: getUserId(),
+          broker_name: broker.name 
+        })
+      });
+      
       const data = await response.json();
       
-      const isSuccess = data.status === 'online';
+      const isSuccess = data?.success || false;
       
       setConnectionStatus(prev => ({
         ...prev,
@@ -441,14 +484,22 @@ const BrokerSettings = () => {
           ...prev[brokerId], 
           isChecking: false,
           lastChecked: new Date().toISOString(),
-          status: isSuccess ? 'success' : 'failed'
+          status: isSuccess ? 'success' : 'failed',
+          message: data?.message || ''
         }
       }));
 
+      setConnectionTestResult({
+        broker: broker.name,
+        success: isSuccess,
+        message: data?.message || (isSuccess ? 'Connection successful' : 'Connection failed'),
+        timestamp: new Date().toLocaleTimeString('en-IN')
+      });
+
       if (isSuccess) {
-        alert(`✅ Connection to ${broker.name} successful!`);
+        alert(isHindi ? `✅ ${broker.name} कनेक्शन सफल!` : `✅ Connection to ${broker.name} successful!`);
       } else {
-        alert(`❌ Connection to ${broker.name} failed. Please check API keys.`);
+        alert(isHindi ? `❌ ${broker.name} कनेक्शन फेल। कृपया API keys चेक करें।` : `❌ Connection to ${broker.name} failed. Please check API keys.`);
       }
     } catch (error) {
       setConnectionStatus(prev => ({
@@ -457,16 +508,25 @@ const BrokerSettings = () => {
           ...prev[brokerId], 
           isChecking: false,
           lastChecked: new Date().toISOString(),
-          status: 'failed'
+          status: 'failed',
+          message: error.message
         }
       }));
-      alert(`❌ Connection test failed: ${error.message}`);
+      
+      setConnectionTestResult({
+        broker: broker.name,
+        success: false,
+        message: error.message || 'Network error',
+        timestamp: new Date().toLocaleTimeString('en-IN')
+      });
+      
+      alert(isHindi ? `❌ कनेक्शन टेस्ट फेल: ${error.message}` : `❌ Connection test failed: ${error.message}`);
     }
-  };
+  }, [brokerConnections, getUserId, getUserToken, isHindi]);
 
   const handleExportHoldings = () => {
     if (holdings.length === 0) {
-      alert('No holdings to export!');
+      alert(isHindi ? 'एक्सपोर्ट करने के लिए कोई होल्डिंग्स नहीं!' : 'No holdings to export!');
       return;
     }
     
@@ -475,7 +535,7 @@ const BrokerSettings = () => {
     const csvContent = "data:text/csv;charset=utf-8," 
       + "Stock,Quantity,Avg Price,Current Price,Invested,Current Value,P&L,P&L%,Broker\n"
       + data.map(h => 
-          `${h.symbol},${h.quantity || 0},${h.avgPrice || 0},${h.currentPrice || 0},${h.investedAmount || 0},${h.currentValue || 0},${h.pnl || 0},${h.pnlPercent || 0}%,${h.broker || 'Unknown'}`
+          `${h.symbol || ''},${h.quantity || 0},${h.avgPrice || h.entry_price || 0},${h.currentPrice || h.current_price || 0},${h.investedAmount || h.invested_amount || 0},${h.currentValue || h.current_value || 0},${h.pnl || 0},${h.pnlPercent || h.pnl_percent || 0}%,${h.broker || 'Unknown'}`
         ).join("\n");
     
     const encodedUri = encodeURI(csvContent);
@@ -494,14 +554,14 @@ const BrokerSettings = () => {
   const totalEquity = brokerConnections.reduce((sum, broker) => sum + (broker.equity || 0), 0);
 
   // Broker-specific configuration
-  const brokerConfigs = {
+  const brokerConfigs = useMemo(() => ({
     zerodha: {
       name: 'Zerodha',
       logo: 'Z',
       color: 'blue',
       authType: 'api',
       fields: ['api_key', 'api_secret', 'user_id', 'pin', 'totp'],
-      instructions: 'Generate API keys from Zerodha Console with read permissions'
+      instructions: isHindi ? 'Zerodha Console से read permissions के साथ API keys generate करें' : 'Generate API keys from Zerodha Console with read permissions'
     },
     upstox: {
       name: 'Upstox',
@@ -509,7 +569,7 @@ const BrokerSettings = () => {
       color: 'purple',
       authType: 'api',
       fields: ['api_key', 'api_secret'],
-      instructions: 'Get API keys from Upstox Developer Portal'
+      instructions: isHindi ? 'Upstox Developer Portal से API keys लें' : 'Get API keys from Upstox Developer Portal'
     },
     groww: {
       name: 'Groww',
@@ -517,7 +577,7 @@ const BrokerSettings = () => {
       color: 'green',
       authType: 'api',
       fields: ['api_key', 'api_secret', 'user_id'],
-      instructions: 'API keys available in Groww Settings'
+      instructions: isHindi ? 'Groww Settings में API keys उपलब्ध हैं' : 'API keys available in Groww Settings'
     },
     angelone: {
       name: 'Angel One',
@@ -525,7 +585,7 @@ const BrokerSettings = () => {
       color: 'orange',
       authType: 'api',
       fields: ['api_key', 'api_secret', 'user_id', 'pin'],
-      instructions: 'Generate API keys from Angel One Developer'
+      instructions: isHindi ? 'Angel One Developer से API keys generate करें' : 'Generate API keys from Angel One Developer'
     },
     icicidirect: {
       name: 'ICICI Direct',
@@ -533,7 +593,7 @@ const BrokerSettings = () => {
       color: 'red',
       authType: 'credentials',
       fields: ['user_id', 'password', 'pin'],
-      instructions: 'Use your ICICI Direct login credentials'
+      instructions: isHindi ? 'अपने ICICI Direct login credentials का use करें' : 'Use your ICICI Direct login credentials'
     },
     hdfcsec: {
       name: 'HDFC Securities',
@@ -541,24 +601,58 @@ const BrokerSettings = () => {
       color: 'blue',
       authType: 'credentials',
       fields: ['user_id', 'password', 'pin'],
-      instructions: 'Use your HDFC Securities login credentials'
+      instructions: isHindi ? 'अपने HDFC Securities login credentials का use करें' : 'Use your HDFC Securities login credentials'
     }
-  };
+  }), [isHindi]);
 
-  if (loading) {
+  // Connection status display
+  const connectionStatusDisplay = useMemo(() => {
+    if (isBackendConnected) {
+      return {
+        text: isHindi ? 'बैकेंड कनेक्टेड' : 'Backend Connected',
+        icon: <Wifi className="w-5 h-5 text-emerald-400" />,
+        color: 'text-emerald-400',
+        bg: 'bg-emerald-500/30',
+        dotColor: 'bg-emerald-400'
+      };
+    }
+    return {
+      text: isHindi ? 'बैकेंड डिस्कनेक्टेड' : 'Backend Disconnected',
+      icon: <WifiOff className="w-5 h-5 text-red-400" />,
+      color: 'text-red-400',
+      bg: 'bg-red-500/30',
+      dotColor: 'bg-red-400'
+    };
+  }, [isBackendConnected, isHindi]);
+
+  if (loading && brokerConnections.length === 0) {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
+      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-4 md:p-6">
+        <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Broker Settings</h1>
-            <p className="text-gray-600">Loading broker connections...</p>
+            <h1 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
+              {isHindi ? 'ब्रोकर सेटिंग्स' : 'Broker Settings'}
+            </h1>
+            <p className="text-sm text-emerald-300/80 mt-1">
+              {isHindi ? 'ब्रोकर कनेक्शन लोड हो रहे हैं...' : 'Loading broker connections...'}
+            </p>
           </div>
         </div>
+        
         <div className="flex justify-center items-center h-96">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-            <p className="mt-4 text-gray-600">Connecting to backend...</p>
-            <p className="text-sm text-gray-500">Fetching broker data from VeloxTradeAI</p>
+            <div className="relative mx-auto mb-4">
+              <div className="absolute inset-0 bg-gradient-to-r from-emerald-500 to-cyan-500 rounded-full blur-xl opacity-20"></div>
+              <div className="relative">
+                <RefreshCw className="w-12 h-12 text-emerald-400 animate-spin" />
+              </div>
+            </div>
+            <p className="text-emerald-300">
+              {isHindi ? 'ब्रोकर डेटा लोड हो रहा है...' : 'Loading broker data...'}
+            </p>
+            <p className="text-sm text-emerald-300/60 mt-1">
+              {isHindi ? 'बैकेंड से कनेक्ट हो रहा है' : 'Connecting to backend...'}
+            </p>
           </div>
         </div>
       </div>
@@ -566,113 +660,166 @@ const BrokerSettings = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-4 md:p-6">
+      
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Broker Settings</h1>
-          <p className="text-gray-600">Connect and manage your trading accounts</p>
+      <div className="mb-6 md:mb-8">
+        <div className="flex flex-col md:flex-row md:items-center justify-between mb-6">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
+              {isHindi ? 'ब्रोकर सेटिंग्स' : 'Broker Settings'}
+            </h1>
+            <p className="text-sm text-emerald-300/80 mt-1">
+              {isHindi ? 'अपने ट्रेडिंग अकाउंट्स को कनेक्ट और मैनेज करें' : 'Connect and manage your trading accounts'}
+            </p>
+          </div>
+          
+          <button 
+            onClick={() => setActiveBroker('select')}
+            className="flex items-center space-x-2 px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-600/20 to-cyan-600/20 border border-emerald-500/30 hover:border-emerald-400/50 text-emerald-300 font-medium transition-all mt-4 md:mt-0"
+          >
+            <Plus className="w-4 h-4" />
+            <span>{isHindi ? 'नया ब्रोकर कनेक्ट करें' : 'Connect New Broker'}</span>
+          </button>
         </div>
-        <button 
-          onClick={() => setActiveBroker('select')}
-          className="flex items-center space-x-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-6 py-3 rounded-xl font-medium shadow-md hover:shadow-lg transition-all"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Connect New Broker</span>
-        </button>
+
+        {/* CONNECTION STATUS */}
+        <div className="bg-gradient-to-r from-emerald-900/20 to-cyan-900/10 border border-emerald-900/40 rounded-2xl p-4 mb-6">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center space-x-3">
+              <div className="relative">
+                <div className={`absolute inset-0 rounded-full ${connectionStatusDisplay.bg} ${isBackendConnected ? 'animate-ping' : ''}`}></div>
+                {connectionStatusDisplay.icon}
+              </div>
+              <div>
+                <h3 className="font-medium text-white">
+                  {connectionStatusDisplay.text}
+                </h3>
+                <p className="text-xs text-emerald-300/70">
+                  {isHindi ? 'API:' : 'API:'} {API_BASE_URL}
+                </p>
+              </div>
+            </div>
+            
+            {connectionTestResult && (
+              <div className={`px-3 py-1.5 rounded-full text-xs font-medium ${
+                connectionTestResult.success 
+                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
+                  : 'bg-red-500/20 text-red-400 border border-red-500/30'
+              }`}>
+                <div className="flex items-center space-x-1.5">
+                  <div className={`w-1.5 h-1.5 rounded-full ${connectionTestResult.success ? 'bg-emerald-400' : 'bg-red-400'}`}></div>
+                  <span>{connectionTestResult.broker}: {connectionTestResult.success ? 'Connected' : 'Failed'}</span>
+                </div>
+              </div>
+            )}
+            
+            <div className="text-xs text-emerald-300/50">
+              v3.0 • {language === 'hi' ? 'हिंदी' : 'English'}
+            </div>
+          </div>
+        </div>
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-          <div className="flex items-center space-x-2 text-red-700">
+        <div className="mb-6 bg-gradient-to-r from-red-900/20 to-red-800/10 border border-red-900/40 rounded-2xl p-4">
+          <div className="flex items-center space-x-3 text-red-400">
             <AlertCircle className="w-5 h-5" />
-            <p className="font-medium">{error}</p>
+            <div>
+              <p className="font-medium">{error}</p>
+              <p className="text-sm text-red-300/70 mt-1">
+                {isHindi ? 'बैकेंड चेक करें:' : 'Backend URL:'} {API_BASE_URL}
+              </p>
+            </div>
           </div>
-          <p className="text-sm text-red-600 mt-2">
-            Make sure your backend is running at: {API_BASE_URL}
-          </p>
         </div>
       )}
 
       {/* Stats Cards - Show only if connected */}
       {connectedCount > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="bg-gradient-to-br from-blue-50 to-white rounded-xl border border-blue-100 p-5 shadow-sm">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+          <div className="bg-gradient-to-br from-slate-800/40 to-slate-900/30 rounded-2xl border border-emerald-900/40 p-5">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Connected Brokers</p>
-                <p className="text-2xl font-bold text-gray-900">{connectedCount}</p>
+                <p className="text-sm text-emerald-300/70">{isHindi ? 'कनेक्टेड ब्रोकर' : 'Connected Brokers'}</p>
+                <p className="text-2xl font-bold text-white">{connectedCount}</p>
               </div>
-              <div className="p-3 bg-blue-100 rounded-xl">
-                <Server className="w-6 h-6 text-blue-600" />
+              <div className="p-3 bg-emerald-500/20 rounded-xl">
+                <Server className="w-6 h-6 text-emerald-400" />
               </div>
             </div>
-            <div className="mt-3 text-xs text-gray-500">
-              {brokerConnections.filter(b => b.status === 'disconnected').length} available to connect
+            <div className="mt-3 text-xs text-emerald-300/60">
+              {brokerConnections.filter(b => b.status === 'disconnected').length} {isHindi ? 'कनेक्ट किए जा सकते हैं' : 'available to connect'}
             </div>
           </div>
 
-          <div className="bg-gradient-to-br from-green-50 to-white rounded-xl border border-green-100 p-5 shadow-sm">
+          <div className="bg-gradient-to-br from-slate-800/40 to-slate-900/30 rounded-2xl border border-cyan-900/40 p-5">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Total Holdings</p>
-                <p className="text-2xl font-bold text-gray-900">{totalHoldings}</p>
+                <p className="text-sm text-cyan-300/70">{isHindi ? 'कुल होल्डिंग्स' : 'Total Holdings'}</p>
+                <p className="text-2xl font-bold text-white">{totalHoldings}</p>
               </div>
-              <div className="p-3 bg-green-100 rounded-xl">
-                <Database className="w-6 h-6 text-green-600" />
+              <div className="p-3 bg-cyan-500/20 rounded-xl">
+                <Database className="w-6 h-6 text-cyan-400" />
               </div>
             </div>
-            <div className="mt-3 text-xs text-gray-500">stocks across all brokers</div>
+            <div className="mt-3 text-xs text-cyan-300/60">
+              {isHindi ? 'सभी ब्रोकरों में' : 'stocks across all brokers'}
+            </div>
           </div>
 
-          <div className="bg-gradient-to-br from-purple-50 to-white rounded-xl border border-purple-100 p-5 shadow-sm">
+          <div className="bg-gradient-to-br from-slate-800/40 to-slate-900/30 rounded-2xl border border-purple-900/40 p-5">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Available Balance</p>
-                <p className="text-2xl font-bold text-gray-900">₹{totalBalance.toLocaleString()}</p>
+                <p className="text-sm text-purple-300/70">{isHindi ? 'उपलब्ध बैलेंस' : 'Available Balance'}</p>
+                <p className="text-2xl font-bold text-white">{formatCurrency(totalBalance)}</p>
               </div>
-              <div className="p-3 bg-purple-100 rounded-xl">
-                <Wallet className="w-6 h-6 text-purple-600" />
+              <div className="p-3 bg-purple-500/20 rounded-xl">
+                <Wallet className="w-6 h-6 text-purple-400" />
               </div>
             </div>
-            <div className="mt-3 text-xs text-gray-500">across all accounts</div>
+            <div className="mt-3 text-xs text-purple-300/60">
+              {isHindi ? 'सभी अकाउंट्स में' : 'across all accounts'}
+            </div>
           </div>
 
-          <div className="bg-gradient-to-br from-orange-50 to-white rounded-xl border border-orange-100 p-5 shadow-sm">
+          <div className="bg-gradient-to-br from-slate-800/40 to-slate-900/30 rounded-2xl border border-amber-900/40 p-5">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Total Equity</p>
-                <p className="text-2xl font-bold text-gray-900">₹{totalEquity.toLocaleString()}</p>
+                <p className="text-sm text-amber-300/70">{isHindi ? 'कुल इक्विटी' : 'Total Equity'}</p>
+                <p className="text-2xl font-bold text-white">{formatCurrency(totalEquity)}</p>
               </div>
-              <div className="p-3 bg-orange-100 rounded-xl">
-                <TrendingUp className="w-6 h-6 text-orange-600" />
+              <div className="p-3 bg-amber-500/20 rounded-xl">
+                <TrendingUp className="w-6 h-6 text-amber-400" />
               </div>
             </div>
-            <div className="mt-3 text-xs text-gray-500">current portfolio value</div>
+            <div className="mt-3 text-xs text-amber-300/60">
+              {isHindi ? 'वर्तमान पोर्टफोलियो वैल्यू' : 'current portfolio value'}
+            </div>
           </div>
         </div>
       ) : (
         // Empty state when no brokers connected
-        <div className="bg-gradient-to-br from-gray-50 to-white rounded-2xl border-2 border-dashed border-gray-300 p-12 text-center">
-          <div className="w-20 h-20 mx-auto bg-gray-100 rounded-full flex items-center justify-center mb-6">
-            <Unlink className="w-10 h-10 text-gray-400" />
+        <div className="mb-8 bg-gradient-to-br from-slate-800/40 to-slate-900/30 rounded-2xl border-2 border-dashed border-emerald-900/40 p-12 text-center">
+          <div className="w-20 h-20 mx-auto bg-gradient-to-br from-emerald-900/20 to-cyan-900/10 rounded-full flex items-center justify-center mb-6 border border-emerald-900/40">
+            <Unlink className="w-10 h-10 text-emerald-400/60" />
           </div>
-          <h3 className="text-xl font-bold text-gray-800 mb-2">No Brokers Connected</h3>
-          <p className="text-gray-600 mb-6 max-w-md mx-auto">
-            Connect your trading account to view holdings, sync portfolio, and get AI-powered insights.
+          <h3 className="text-xl font-bold text-white mb-2">{isHindi ? 'कोई ब्रोकर कनेक्ट नहीं है' : 'No Brokers Connected'}</h3>
+          <p className="text-emerald-300/70 mb-6 max-w-md mx-auto">
+            {isHindi ? 'अपना ट्रेडिंग अकाउंट कनेक्ट करें और होल्डिंग्स देखें, पोर्टफोलियो सिंक करें, और AI-powered इनसाइट्स पाएं।' : 'Connect your trading account to view holdings, sync portfolio, and get AI-powered insights.'}
           </p>
           <button 
             onClick={() => setActiveBroker('select')}
-            className="inline-flex items-center space-x-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-6 py-3 rounded-xl font-medium shadow-md hover:shadow-lg transition-all"
+            className="inline-flex items-center space-x-2 px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-cyan-600 hover:from-emerald-700 hover:to-cyan-700 text-white font-medium transition-all"
           >
             <Plus className="w-4 h-4" />
-            <span>Connect Your First Broker</span>
+            <span>{isHindi ? 'पहला ब्रोकर कनेक्ट करें' : 'Connect Your First Broker'}</span>
           </button>
-          <div className="mt-8 text-sm text-gray-500">
-            <p className="mb-2">Supported brokers:</p>
+          <div className="mt-8 text-sm text-emerald-300/50">
+            <p className="mb-2">{isHindi ? 'सपोर्टेड ब्रोकर:' : 'Supported brokers:'}</p>
             <div className="flex flex-wrap justify-center gap-3">
               {Object.values(brokerConfigs).map((broker) => (
-                <span key={broker.name} className="px-3 py-1 bg-gray-100 text-gray-700 rounded-lg text-xs">
+                <span key={broker.name} className="px-3 py-1 bg-emerald-900/30 text-emerald-300 rounded-lg text-xs border border-emerald-900/40">
                   {broker.name}
                 </span>
               ))}
@@ -683,21 +830,21 @@ const BrokerSettings = () => {
 
       {/* Broker Connections Table - Only show if we have brokers */}
       {brokerConnections.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
-          <div className="p-6 border-b border-gray-200">
+        <div className="bg-gradient-to-br from-slate-800/40 to-slate-900/30 rounded-2xl border border-emerald-900/40 overflow-hidden mb-8">
+          <div className="p-6 border-b border-emerald-900/40">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-semibold">Broker Connections</h2>
-                <p className="text-gray-600">Manage your broker connections and API keys</p>
+                <h2 className="text-lg font-bold text-white">{isHindi ? 'ब्रोकर कनेक्शन्स' : 'Broker Connections'}</h2>
+                <p className="text-sm text-emerald-300/70">{isHindi ? 'अपने ब्रोकर कनेक्शन्स और API keys मैनेज करें' : 'Manage your broker connections and API keys'}</p>
               </div>
               {connectedCount > 0 && (
                 <div className="flex items-center space-x-2">
                   <button 
                     onClick={() => window.open('https://developers.kite.trade/', '_blank')}
-                    className="text-sm text-blue-600 hover:text-blue-800 font-medium flex items-center"
+                    className="text-sm text-emerald-400 hover:text-emerald-300 font-medium flex items-center"
                   >
                     <Info className="w-4 h-4 mr-1" />
-                    Connection Guide
+                    {isHindi ? 'कनेक्शन गाइड' : 'Connection Guide'}
                   </button>
                 </div>
               )}
@@ -707,60 +854,60 @@ const BrokerSettings = () => {
           {connectedCount === 0 ? (
             // No connected brokers
             <div className="p-12 text-center">
-              <div className="w-16 h-16 mx-auto bg-gray-100 rounded-full flex items-center justify-center mb-4">
-                <Unlink className="w-8 h-8 text-gray-400" />
+              <div className="w-16 h-16 mx-auto bg-emerald-900/20 rounded-full flex items-center justify-center mb-4 border border-emerald-900/40">
+                <Unlink className="w-8 h-8 text-emerald-400/60" />
               </div>
-              <h3 className="text-lg font-medium text-gray-800 mb-2">No Active Connections</h3>
-              <p className="text-gray-600 mb-6">Connect a broker to start syncing your holdings</p>
+              <h3 className="text-lg font-medium text-white mb-2">{isHindi ? 'कोई एक्टिव कनेक्शन नहीं' : 'No Active Connections'}</h3>
+              <p className="text-emerald-300/70 mb-6">{isHindi ? 'अपनी होल्डिंग्स सिंक करने के लिए ब्रोकर कनेक्ट करें' : 'Connect a broker to start syncing your holdings'}</p>
               <button 
                 onClick={() => setActiveBroker('select')}
-                className="inline-flex items-center space-x-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-6 py-3 rounded-xl font-medium"
+                className="inline-flex items-center space-x-2 px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-cyan-600 hover:from-emerald-700 hover:to-cyan-700 text-white font-medium"
               >
                 <Plus className="w-4 h-4" />
-                <span>Connect Broker</span>
+                <span>{isHindi ? 'ब्रोकर कनेक्ट करें' : 'Connect Broker'}</span>
               </button>
             </div>
           ) : (
             // Connected brokers table
             <div className="overflow-x-auto">
-              <table className="w-full">
+              <table className="w-full min-w-max">
                 <thead>
-                  <tr className="bg-gray-50">
-                    <th className="py-3 px-6 text-left text-sm font-medium text-gray-700">Broker</th>
-                    <th className="py-3 px-6 text-left text-sm font-medium text-gray-700">Status</th>
-                    <th className="py-3 px-6 text-left text-sm font-medium text-gray-700">Holdings</th>
-                    <th className="py-3 px-6 text-left text-sm font-medium text-gray-700">Balance/Equity</th>
-                    <th className="py-3 px-6 text-left text-sm font-medium text-gray-700">Last Sync</th>
-                    <th className="py-3 px-6 text-left text-sm font-medium text-gray-700">Actions</th>
+                  <tr className="bg-gradient-to-r from-emerald-900/20 to-cyan-900/10">
+                    <th className="py-3 px-6 text-left text-sm font-medium text-emerald-400">{isHindi ? 'ब्रोकर' : 'Broker'}</th>
+                    <th className="py-3 px-6 text-left text-sm font-medium text-emerald-400">{isHindi ? 'स्टेटस' : 'Status'}</th>
+                    <th className="py-3 px-6 text-left text-sm font-medium text-emerald-400">{isHindi ? 'होल्डिंग्स' : 'Holdings'}</th>
+                    <th className="py-3 px-6 text-left text-sm font-medium text-emerald-400">{isHindi ? 'बैलेंस/इक्विटी' : 'Balance/Equity'}</th>
+                    <th className="py-3 px-6 text-left text-sm font-medium text-emerald-400">{isHindi ? 'आखिरी सिंक' : 'Last Sync'}</th>
+                    <th className="py-3 px-6 text-left text-sm font-medium text-emerald-400">{isHindi ? 'एक्शन' : 'Actions'}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {brokerConnections.map((broker) => (
-                    <tr key={broker.id} className="border-b border-gray-100 hover:bg-gray-50/50">
+                    <tr key={broker.id} className="border-b border-emerald-900/20 hover:bg-emerald-900/10 transition-colors">
                       <td className="py-4 px-6">
                         <div className="flex items-center space-x-3">
                           <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                            broker.status === 'connected' ? 'bg-blue-100' : 'bg-gray-100'
-                          }`}>
+                            broker.status === 'connected' ? 'bg-emerald-500/20' : 'bg-slate-700/50'
+                          } border ${broker.status === 'connected' ? 'border-emerald-500/30' : 'border-slate-600/50'}`}>
                             <span className={`font-bold ${
-                              broker.status === 'connected' ? 'text-blue-600' : 'text-gray-400'
+                              broker.status === 'connected' ? 'text-emerald-400' : 'text-slate-400'
                             }`}>
                               {broker.name.charAt(0)}
                             </span>
                           </div>
                           <div>
                             <div className="flex items-center space-x-2">
-                              <p className="font-medium">{broker.name}</p>
-                              <span className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded">
+                              <p className="font-medium text-white">{broker.name}</p>
+                              <span className="text-xs px-2 py-1 bg-slate-700/50 text-emerald-300 rounded border border-emerald-900/40">
                                 {broker.accountType}
                               </span>
                             </div>
-                            <p className="text-sm text-gray-500">
+                            <p className="text-sm text-emerald-300/60">
                               {broker.status === 'connected' 
                                 ? broker.connectedSince 
-                                  ? `Connected since ${broker.connectedSince}`
-                                  : 'Connected'
-                                : 'Not connected'
+                                  ? (isHindi ? `कनेक्ट: ${broker.connectedSince}` : `Connected: ${broker.connectedSince}`)
+                                  : (isHindi ? 'कनेक्टेड' : 'Connected')
+                                : (isHindi ? 'कनेक्ट नहीं' : 'Not connected')
                               }
                             </p>
                           </div>
@@ -771,25 +918,25 @@ const BrokerSettings = () => {
                         <div className="flex items-center space-x-2">
                           <span className={`px-3 py-1 rounded-full text-xs font-medium ${
                             broker.status === 'connected'
-                              ? 'bg-green-100 text-green-800'
-                              : 'bg-gray-100 text-gray-800'
+                              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                              : 'bg-slate-700/50 text-slate-400 border border-slate-600/50'
                           }`}>
-                            {broker.status === 'connected' ? 'Connected' : 'Disconnected'}
+                            {broker.status === 'connected' ? (isHindi ? 'कनेक्टेड' : 'Connected') : (isHindi ? 'डिस्कनेक्टेड' : 'Disconnected')}
                           </span>
                           {connectionStatus[broker.id]?.isChecking && (
-                            <RefreshCw className="w-3 h-3 animate-spin text-gray-400" />
+                            <RefreshCw className="w-3 h-3 animate-spin text-emerald-400" />
                           )}
                         </div>
                       </td>
                       
                       <td className="py-4 px-6">
                         <div>
-                          <p className="font-medium">{broker.holdings} stocks</p>
+                          <p className="font-medium text-white">{broker.holdings} {isHindi ? 'स्टॉक्स' : 'stocks'}</p>
                           {broker.status === 'connected' && broker.profitLoss !== '0' && (
-                            <p className="text-sm text-gray-500">
+                            <p className="text-sm text-emerald-300/60">
                               P&L: <span className={
-                                broker.profitLoss?.includes('+') ? 'text-green-600' : 
-                                broker.profitLoss?.includes('-') ? 'text-red-600' : 'text-gray-600'
+                                broker.profitLoss?.includes('+') ? 'text-emerald-400' : 
+                                broker.profitLoss?.includes('-') ? 'text-red-400' : 'text-slate-400'
                               }>
                                 {broker.profitLoss}
                               </span>
@@ -800,18 +947,18 @@ const BrokerSettings = () => {
                       
                       <td className="py-4 px-6">
                         <div>
-                          <p className="font-medium">₹{broker.balance.toLocaleString()}</p>
-                          <p className="text-sm text-gray-500">₹{broker.equity.toLocaleString()} equity</p>
+                          <p className="font-medium text-white">{formatCurrency(broker.balance)}</p>
+                          <p className="text-sm text-emerald-300/60">{formatCurrency(broker.equity)} {isHindi ? 'इक्विटी' : 'equity'}</p>
                         </div>
                       </td>
                       
                       <td className="py-4 px-6">
                         <div>
-                          <p className={broker.lastSync ? 'text-gray-700' : 'text-gray-400'}>
-                            {broker.lastSync || 'Never'}
+                          <p className={broker.lastSync ? 'text-white' : 'text-emerald-300/60'}>
+                            {broker.lastSync || (isHindi ? 'कभी नहीं' : 'Never')}
                           </p>
                           {broker.status === 'connected' && broker.todayTrades > 0 && (
-                            <p className="text-xs text-blue-600">{broker.todayTrades} trades today</p>
+                            <p className="text-xs text-cyan-400">{broker.todayTrades} {isHindi ? 'ट्रेड्स आज' : 'trades today'}</p>
                           )}
                         </div>
                       </td>
@@ -823,29 +970,29 @@ const BrokerSettings = () => {
                               <button
                                 onClick={() => handleSync(broker.id)}
                                 disabled={isSyncing}
-                                className="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition-colors"
-                                title="Sync Holdings"
+                                className="p-2 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-900/30 rounded-lg transition-colors border border-emerald-900/40"
+                                title={isHindi ? 'होल्डिंग्स सिंक करें' : 'Sync Holdings'}
                               >
                                 <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
                               </button>
                               <button
                                 onClick={() => setActiveBroker(broker.id)}
-                                className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-50 rounded-lg transition-colors"
-                                title="Manage API Keys"
+                                className="p-2 text-cyan-400 hover:text-cyan-300 hover:bg-cyan-900/30 rounded-lg transition-colors border border-cyan-900/40"
+                                title={isHindi ? 'API keys मैनेज करें' : 'Manage API Keys'}
                               >
                                 <Settings className="w-4 h-4" />
                               </button>
                               <button
                                 onClick={() => handleTestConnection(broker.id)}
-                                className="p-2 text-green-600 hover:text-green-800 hover:bg-green-50 rounded-lg transition-colors"
-                                title="Test Connection"
+                                className="p-2 text-green-400 hover:text-green-300 hover:bg-green-900/30 rounded-lg transition-colors border border-green-900/40"
+                                title={isHindi ? 'कनेक्शन टेस्ट करें' : 'Test Connection'}
                               >
                                 <CheckCircle className="w-4 h-4" />
                               </button>
                               <button
                                 onClick={() => handleDisconnect(broker.id)}
-                                className="p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors"
-                                title="Disconnect"
+                                className="p-2 text-red-400 hover:text-red-300 hover:bg-red-900/30 rounded-lg transition-colors border border-red-900/40"
+                                title={isHindi ? 'डिस्कनेक्ट करें' : 'Disconnect'}
                               >
                                 <Unlink className="w-4 h-4" />
                               </button>
@@ -853,9 +1000,9 @@ const BrokerSettings = () => {
                           ) : (
                             <button
                               onClick={() => setActiveBroker(broker.id)}
-                              className="px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-lg font-medium"
+                              className="px-4 py-2 bg-gradient-to-r from-emerald-600/20 to-cyan-600/20 border border-emerald-500/30 text-emerald-300 rounded-lg hover:border-emerald-400/50 font-medium"
                             >
-                              Connect
+                              {isHindi ? 'कनेक्ट' : 'Connect'}
                             </button>
                           )}
                         </div>
@@ -867,12 +1014,15 @@ const BrokerSettings = () => {
             </div>
           )}
 
-          <div className="p-6 border-t border-gray-200">
+          <div className="p-6 border-t border-emerald-900/40">
             <div className="flex items-center justify-between">
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-emerald-300/70">
                 {connectedCount === 0 
-                  ? 'No brokers connected' 
-                  : `Total: ${brokerConnections.length} brokers • ${connectedCount} connected • ${brokerConnections.length - connectedCount} disconnected`
+                  ? (isHindi ? 'कोई ब्रोकर कनेक्ट नहीं' : 'No brokers connected') 
+                  : (isHindi ? 
+                    `कुल: ${brokerConnections.length} ब्रोकर • ${connectedCount} कनेक्टेड • ${brokerConnections.length - connectedCount} डिस्कनेक्टेड` :
+                    `Total: ${brokerConnections.length} brokers • ${connectedCount} connected • ${brokerConnections.length - connectedCount} disconnected`
+                    )
                 }
               </p>
               <div className="flex items-center space-x-3">
@@ -880,10 +1030,10 @@ const BrokerSettings = () => {
                   <button 
                     onClick={handleSyncAll}
                     disabled={isSyncing}
-                    className="flex items-center space-x-2 text-blue-600 hover:text-blue-800 font-medium disabled:opacity-50"
+                    className="flex items-center space-x-2 text-emerald-400 hover:text-emerald-300 font-medium disabled:opacity-50"
                   >
                     <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
-                    <span>Sync All Brokers</span>
+                    <span>{isHindi ? 'सभी ब्रोकर सिंक करें' : 'Sync All Brokers'}</span>
                   </button>
                 )}
               </div>
@@ -894,29 +1044,29 @@ const BrokerSettings = () => {
 
       {/* Holdings Summary - Only show if we have holdings */}
       {holdings.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
-          <div className="p-6 border-b border-gray-200">
+        <div className="bg-gradient-to-br from-slate-800/40 to-slate-900/30 rounded-2xl border border-emerald-900/40 overflow-hidden mb-8">
+          <div className="p-6 border-b border-emerald-900/40">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-semibold">Portfolio Summary</h2>
-                <p className="text-gray-600">Combined holdings from all connected brokers</p>
+                <h2 className="text-lg font-bold text-white">{isHindi ? 'पोर्टफोलियो सारांश' : 'Portfolio Summary'}</h2>
+                <p className="text-sm text-emerald-300/70">{isHindi ? 'सभी कनेक्टेड ब्रोकरों से संयुक्त होल्डिंग्स' : 'Combined holdings from all connected brokers'}</p>
               </div>
               <div className="flex items-center space-x-3">
                 <button 
                   onClick={handleExportHoldings}
-                  className="flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                  className="flex items-center space-x-2 px-4 py-2 border border-emerald-900/40 text-emerald-300 rounded-lg hover:border-emerald-500/60 hover:bg-emerald-900/20 transition-all"
                 >
                   <Download className="w-4 h-4" />
-                  <span>Export CSV</span>
+                  <span>{isHindi ? 'CSV एक्सपोर्ट' : 'Export CSV'}</span>
                 </button>
                 {connectedCount > 0 && (
                   <button 
                     onClick={handleSyncAll}
                     disabled={isSyncing}
-                    className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-lg disabled:opacity-50"
+                    className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-emerald-600/20 to-cyan-600/20 border border-emerald-500/30 text-emerald-300 rounded-lg hover:border-emerald-400/50 disabled:opacity-50 transition-all"
                   >
                     <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
-                    <span>{isSyncing ? 'Syncing...' : 'Sync All'}</span>
+                    <span>{isSyncing ? (isHindi ? 'सिंक हो रहा...' : 'Syncing...') : (isHindi ? 'सभी सिंक करें' : 'Sync All')}</span>
                   </button>
                 )}
               </div>
@@ -926,52 +1076,52 @@ const BrokerSettings = () => {
           <div className="p-6">
             {/* Portfolio Stats */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-              <div className="bg-gradient-to-br from-blue-50 to-white rounded-xl border border-blue-100 p-5">
-                <p className="text-sm text-gray-600 mb-2">Total Investments</p>
+              <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/40 rounded-xl border border-emerald-900/40 p-5">
+                <p className="text-sm text-emerald-300/70 mb-2">{isHindi ? 'कुल निवेश' : 'Total Investments'}</p>
                 <div className="flex items-baseline justify-between">
-                  <p className="text-2xl font-bold text-gray-900">₹{portfolioStats.totalInvestment.toLocaleString()}</p>
-                  <span className="text-sm font-medium text-gray-500">
-                    across {holdings.length} holdings
+                  <p className="text-2xl font-bold text-white">{formatCurrency(portfolioStats.totalInvestment)}</p>
+                  <span className="text-sm font-medium text-emerald-300/60">
+                    {isHindi ? `${holdings.length} होल्डिंग्स में` : `across ${holdings.length} holdings`}
                   </span>
                 </div>
               </div>
 
-              <div className="bg-gradient-to-br from-green-50 to-white rounded-xl border border-green-100 p-5">
-                <p className="text-sm text-gray-600 mb-2">Current Value</p>
+              <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/40 rounded-xl border border-cyan-900/40 p-5">
+                <p className="text-sm text-cyan-300/70 mb-2">{isHindi ? 'वर्तमान वैल्यू' : 'Current Value'}</p>
                 <div className="flex items-baseline justify-between">
-                  <p className="text-2xl font-bold text-gray-900">₹{portfolioStats.currentValue.toLocaleString()}</p>
+                  <p className="text-2xl font-bold text-white">{formatCurrency(portfolioStats.currentValue)}</p>
                   <span className={`text-sm font-medium ${
-                    portfolioStats.totalPnlPercent >= 0 ? 'text-green-600' : 'text-red-600'
+                    portfolioStats.totalPnlPercent >= 0 ? 'text-emerald-400' : 'text-red-400'
                   }`}>
-                    {portfolioStats.totalPnlPercent >= 0 ? '+' : ''}{portfolioStats.totalPnlPercent.toFixed(2)}%
+                    {portfolioStats.totalPnlPercent >= 0 ? '+' : ''}{safeToFixed(portfolioStats.totalPnlPercent)}%
                   </span>
                 </div>
               </div>
 
-              <div className="bg-gradient-to-br from-purple-50 to-white rounded-xl border border-purple-100 p-5">
-                <p className="text-sm text-gray-600 mb-2">Total P&L</p>
+              <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/40 rounded-xl border border-purple-900/40 p-5">
+                <p className="text-sm text-purple-300/70 mb-2">{isHindi ? 'कुल P&L' : 'Total P&L'}</p>
                 <div className="flex items-baseline justify-between">
                   <p className={`text-2xl font-bold ${
-                    portfolioStats.totalPnl >= 0 ? 'text-green-600' : 'text-red-600'
+                    portfolioStats.totalPnl >= 0 ? 'text-emerald-400' : 'text-red-400'
                   }`}>
-                    {portfolioStats.totalPnl >= 0 ? '+' : ''}₹{Math.abs(portfolioStats.totalPnl).toLocaleString()}
+                    {portfolioStats.totalPnl >= 0 ? '+' : ''}{formatCurrency(Math.abs(portfolioStats.totalPnl))}
                   </p>
-                  <span className="text-sm font-medium text-gray-500">
-                    overall
+                  <span className="text-sm font-medium text-purple-300/60">
+                    {isHindi ? 'समग्र' : 'overall'}
                   </span>
                 </div>
               </div>
 
-              <div className="bg-gradient-to-br from-orange-50 to-white rounded-xl border border-orange-100 p-5">
-                <p className="text-sm text-gray-600 mb-2">Day P&L</p>
+              <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/40 rounded-xl border border-amber-900/40 p-5">
+                <p className="text-sm text-amber-300/70 mb-2">{isHindi ? 'दिन का P&L' : 'Day P&L'}</p>
                 <div className="flex items-baseline justify-between">
                   <p className={`text-2xl font-bold ${
-                    portfolioStats.todayPnl >= 0 ? 'text-green-600' : 'text-red-600'
+                    portfolioStats.todayPnl >= 0 ? 'text-emerald-400' : 'text-red-400'
                   }`}>
-                    {portfolioStats.todayPnl >= 0 ? '+' : ''}₹{Math.abs(portfolioStats.todayPnl).toLocaleString()}
+                    {portfolioStats.todayPnl >= 0 ? '+' : ''}{formatCurrency(Math.abs(portfolioStats.todayPnl))}
                   </p>
-                  <span className="text-sm font-medium text-gray-500">
-                    today
+                  <span className="text-sm font-medium text-amber-300/60">
+                    {isHindi ? 'आज' : 'today'}
                   </span>
                 </div>
               </div>
@@ -979,56 +1129,56 @@ const BrokerSettings = () => {
 
             {/* Holdings Table */}
             {holdings.length > 0 ? (
-              <div className="overflow-x-auto rounded-lg border border-gray-200">
+              <div className="overflow-x-auto rounded-lg border border-emerald-900/40">
                 <table className="w-full">
                   <thead>
-                    <tr className="bg-gray-50">
-                      <th className="py-3 px-6 text-left text-sm font-medium text-gray-700">Stock</th>
-                      <th className="py-3 px-6 text-left text-sm font-medium text-gray-700">Quantity</th>
-                      <th className="py-3 px-6 text-left text-sm font-medium text-gray-700">Avg Price</th>
-                      <th className="py-3 px-6 text-left text-sm font-medium text-gray-700">Current</th>
-                      <th className="py-3 px-6 text-left text-sm font-medium text-gray-700">Invested</th>
-                      <th className="py-3 px-6 text-left text-sm font-medium text-gray-700">Current Value</th>
-                      <th className="py-3 px-6 text-left text-sm font-medium text-gray-700">P&L</th>
-                      <th className="py-3 px-6 text-left text-sm font-medium text-gray-700">Broker</th>
+                    <tr className="bg-gradient-to-r from-emerald-900/20 to-cyan-900/10">
+                      <th className="py-3 px-6 text-left text-sm font-medium text-emerald-400">{isHindi ? 'स्टॉक' : 'Stock'}</th>
+                      <th className="py-3 px-6 text-left text-sm font-medium text-emerald-400">{isHindi ? 'क्वांटिटी' : 'Quantity'}</th>
+                      <th className="py-3 px-6 text-left text-sm font-medium text-emerald-400">{isHindi ? 'औसत प्राइस' : 'Avg Price'}</th>
+                      <th className="py-3 px-6 text-left text-sm font-medium text-emerald-400">{isHindi ? 'करंट' : 'Current'}</th>
+                      <th className="py-3 px-6 text-left text-sm font-medium text-emerald-400">{isHindi ? 'निवेश' : 'Invested'}</th>
+                      <th className="py-3 px-6 text-left text-sm font-medium text-emerald-400">{isHindi ? 'वर्तमान वैल्यू' : 'Current Value'}</th>
+                      <th className="py-3 px-6 text-left text-sm font-medium text-emerald-400">P&L</th>
+                      <th className="py-3 px-6 text-left text-sm font-medium text-emerald-400">{isHindi ? 'ब्रोकर' : 'Broker'}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {holdings.slice(0, 10).map((holding, index) => {
                       const pnl = holding.pnl || 0;
-                      const pnlPercent = holding.pnlPercent || 0;
+                      const pnlPercent = holding.pnlPercent || holding.pnl_percent || 0;
                       
                       return (
-                        <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
+                        <tr key={index} className="border-b border-emerald-900/20 hover:bg-emerald-900/10 transition-colors">
                           <td className="py-4 px-6">
                             <div>
-                              <p className="font-medium">{holding.symbol}</p>
-                              <p className="text-sm text-gray-500">{holding.name || 'NSE'}</p>
+                              <p className="font-medium text-white">{holding.symbol}</p>
+                              <p className="text-sm text-emerald-300/60">{holding.name || 'NSE'}</p>
                             </div>
                           </td>
                           <td className="py-4 px-6">
-                            <span className="font-medium">{holding.quantity || 0}</span>
+                            <span className="font-medium text-white">{holding.quantity || 0}</span>
                           </td>
-                          <td className="py-4 px-6">₹{holding.avgPrice?.toLocaleString() || '0'}</td>
+                          <td className="py-4 px-6 text-white">₹{safeToFixed(holding.avgPrice || holding.entry_price || 0)}</td>
                           <td className="py-4 px-6">
                             <div className="flex items-center">
-                              ₹{holding.currentPrice?.toLocaleString() || '0'}
+                              <span className="text-white">₹{safeToFixed(holding.currentPrice || holding.current_price || 0)}</span>
                               {holding.currentPrice > holding.avgPrice ? (
-                                <span className="ml-2 text-xs text-green-600">↗</span>
+                                <ChevronUp className="ml-2 w-4 h-4 text-emerald-400" />
                               ) : holding.currentPrice < holding.avgPrice ? (
-                                <span className="ml-2 text-xs text-red-600">↘</span>
+                                <ChevronDown className="ml-2 w-4 h-4 text-red-400" />
                               ) : null}
                             </div>
                           </td>
-                          <td className="py-4 px-6">₹{holding.investedAmount.toLocaleString()}</td>
-                          <td className="py-4 px-6">₹{holding.currentValue.toLocaleString()}</td>
+                          <td className="py-4 px-6 text-white">{formatCurrency(holding.investedAmount || holding.invested_amount)}</td>
+                          <td className="py-4 px-6 text-white">{formatCurrency(holding.currentValue || holding.current_value)}</td>
                           <td className="py-4 px-6">
-                            <span className={`font-medium ${pnl >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                              ₹{pnl.toFixed(2)} ({pnlPercent.toFixed(2)}%)
+                            <span className={`font-medium ${pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                              ₹{safeToFixed(pnl)} ({safeToFixed(pnlPercent)}%)
                             </span>
                           </td>
                           <td className="py-4 px-6">
-                            <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium">
+                            <span className="px-2 py-1 bg-emerald-900/30 text-emerald-300 rounded text-xs font-medium border border-emerald-900/40">
                               {holding.broker || 'Unknown'}
                             </span>
                           </td>
@@ -1038,11 +1188,11 @@ const BrokerSettings = () => {
                   </tbody>
                 </table>
                 {holdings.length > 10 && (
-                  <div className="p-4 text-center border-t border-gray-200">
-                    <p className="text-sm text-gray-600">
-                      Showing 10 of {holdings.length} holdings. 
-                      <button className="ml-2 text-blue-600 hover:text-blue-800 font-medium">
-                        View all holdings
+                  <div className="p-4 text-center border-t border-emerald-900/40">
+                    <p className="text-sm text-emerald-300/70">
+                      {isHindi ? `${holdings.length} में से 10 होल्डिंग्स दिख रही हैं।` : `Showing 10 of ${holdings.length} holdings.`}
+                      <button className="ml-2 text-emerald-400 hover:text-emerald-300 font-medium">
+                        {isHindi ? 'सभी होल्डिंग्स देखें' : 'View all holdings'}
                       </button>
                     </p>
                   </div>
@@ -1050,18 +1200,18 @@ const BrokerSettings = () => {
               </div>
             ) : (
               <div className="text-center py-12">
-                <div className="w-16 h-16 mx-auto bg-gray-100 rounded-full flex items-center justify-center mb-4">
-                  <Database className="w-8 h-8 text-gray-400" />
+                <div className="w-16 h-16 mx-auto bg-emerald-900/20 rounded-full flex items-center justify-center mb-4 border border-emerald-900/40">
+                  <Database className="w-8 h-8 text-emerald-400/60" />
                 </div>
-                <h3 className="text-lg font-medium text-gray-800 mb-2">No Holdings Found</h3>
-                <p className="text-gray-600 mb-6">Sync your connected brokers to load holdings</p>
+                <h3 className="text-lg font-medium text-white mb-2">{isHindi ? 'कोई होल्डिंग्स नहीं मिली' : 'No Holdings Found'}</h3>
+                <p className="text-emerald-300/70 mb-6">{isHindi ? 'होल्डिंग्स लोड करने के लिए अपने ब्रोकर्स को सिंक करें' : 'Sync your connected brokers to load holdings'}</p>
                 {connectedCount > 0 && (
                   <button 
                     onClick={handleSyncAll}
-                    className="inline-flex items-center space-x-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-6 py-3 rounded-xl font-medium"
+                    className="inline-flex items-center space-x-2 px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-600/20 to-cyan-600/20 border border-emerald-500/30 text-emerald-300 hover:border-emerald-400/50 font-medium"
                   >
                     <RefreshCw className="w-4 h-4" />
-                    <span>Sync Holdings</span>
+                    <span>{isHindi ? 'होल्डिंग्स सिंक करें' : 'Sync Holdings'}</span>
                   </button>
                 )}
               </div>
@@ -1072,23 +1222,23 @@ const BrokerSettings = () => {
 
       {/* Broker Connection Modal */}
       {activeBroker && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-6">
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <div className="bg-gradient-to-br from-slate-900 to-slate-950 rounded-2xl border border-emerald-900/40 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="border-b border-emerald-900/40 p-6">
+              <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-xl font-bold">
+                  <h3 className="text-xl font-bold text-white">
                     {activeBroker === 'select' 
-                      ? 'Connect New Broker' 
+                      ? (isHindi ? 'नया ब्रोकर कनेक्ट करें' : 'Connect New Broker') 
                       : activeBroker in brokerConfigs
-                      ? `Connect ${brokerConfigs[activeBroker].name}`
-                      : `API Keys - ${brokerConnections.find(b => b.id === activeBroker)?.name || activeBroker}`
+                      ? (isHindi ? `${brokerConfigs[activeBroker].name} कनेक्ट करें` : `Connect ${brokerConfigs[activeBroker].name}`)
+                      : (isHindi ? `API Keys - ${brokerConnections.find(b => b.id === activeBroker)?.name || activeBroker}` : `API Keys - ${brokerConnections.find(b => b.id === activeBroker)?.name || activeBroker}`)
                     }
                   </h3>
-                  <p className="text-gray-600">
+                  <p className="text-sm text-emerald-300/70">
                     {activeBroker === 'select' 
-                      ? 'Select your broker and enter credentials' 
-                      : 'Enter your broker API credentials'
+                      ? (isHindi ? 'अपना ब्रोकर चुनें और credentials डालें' : 'Select your broker and enter credentials') 
+                      : (isHindi ? 'अपने ब्रोकर API credentials डालें' : 'Enter your broker API credentials')
                     }
                   </p>
                 </div>
@@ -1097,196 +1247,196 @@ const BrokerSettings = () => {
                     setActiveBroker(null);
                     setShowApiKeys(false);
                   }} 
-                  className="text-gray-500 hover:text-gray-700 text-2xl p-2 hover:bg-gray-100 rounded-lg"
+                  className="text-emerald-400 hover:text-emerald-300 p-2 hover:bg-slate-800/50 rounded-lg transition-colors"
                 >
-                  &times;
+                  <X className="w-5 h-5" />
                 </button>
               </div>
-              
-              <div className="space-y-6">
-                {activeBroker === 'select' && (
-                  <div className="space-y-4">
-                    <div className="bg-gradient-to-r from-blue-50 to-white border border-blue-200 rounded-xl p-4">
-                      <h4 className="font-medium text-blue-800 mb-2 flex items-center">
-                        <Info className="w-4 h-4 mr-2" />
-                        Select Broker
-                      </h4>
-                      <p className="text-sm text-blue-700 mb-3">
-                        Choose your broker to connect. You'll need API keys from their developer portal.
-                      </p>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-4">
-                      {Object.entries(brokerConfigs).map(([id, config]) => (
-                        <button
-                          key={id}
-                          onClick={() => setActiveBroker(id)}
-                          className="p-4 border border-gray-300 rounded-xl hover:border-blue-500 hover:bg-blue-50 text-left transition-all"
-                        >
-                          <div className="flex items-center space-x-3">
-                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center bg-${config.color}-100`}>
-                              <span className={`font-bold text-${config.color}-600`}>
-                                {config.logo}
-                              </span>
-                            </div>
-                            <div>
-                              <div className="font-medium">{config.name}</div>
-                              <div className="text-xs text-gray-500 mt-1">
-                                {config.authType === 'api' ? 'API Keys Required' : 'Login Credentials'}
-                              </div>
+            </div>
+            
+            <div className="p-6 space-y-6">
+              {activeBroker === 'select' && (
+                <div className="space-y-4">
+                  <div className="bg-gradient-to-r from-emerald-900/20 to-cyan-900/10 border border-emerald-900/40 rounded-xl p-4">
+                    <h4 className="font-medium text-emerald-400 mb-2 flex items-center">
+                      <Info className="w-4 h-4 mr-2" />
+                      {isHindi ? 'ब्रोकर चुनें' : 'Select Broker'}
+                    </h4>
+                    <p className="text-sm text-emerald-300/70">
+                      {isHindi ? 'कनेक्ट करने के लिए अपना ब्रोकर चुनें। आपको उनके developer portal से API keys चाहिए होंगी।' : 'Choose your broker to connect. You\'ll need API keys from their developer portal.'}
+                    </p>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    {Object.entries(brokerConfigs).map(([id, config]) => (
+                      <button
+                        key={id}
+                        onClick={() => setActiveBroker(id)}
+                        className="p-4 border border-emerald-900/40 rounded-xl hover:border-emerald-500/60 hover:bg-emerald-900/10 text-left transition-all group"
+                      >
+                        <div className="flex items-center space-x-3">
+                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center bg-${config.color}-500/20 border border-${config.color}-500/30 group-hover:border-${config.color}-400/50`}>
+                            <span className={`font-bold text-${config.color}-400`}>
+                              {config.logo}
+                            </span>
+                          </div>
+                          <div>
+                            <div className="font-medium text-white">{config.name}</div>
+                            <div className="text-xs text-emerald-300/70 mt-1">
+                              {config.authType === 'api' ? (isHindi ? 'API Keys जरूरी' : 'API Keys Required') : (isHindi ? 'Login Credentials' : 'Login Credentials')}
                             </div>
                           </div>
-                        </button>
-                      ))}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {activeBroker !== 'select' && activeBroker in brokerConfigs && (
+                <>
+                  <div className="bg-gradient-to-r from-emerald-900/20 to-cyan-900/10 border border-emerald-900/40 rounded-xl p-4">
+                    <h4 className="font-medium text-emerald-400 mb-2 flex items-center">
+                      <AlertCircle className="w-4 h-4 mr-2" />
+                      {isHindi ? `${brokerConfigs[activeBroker].name} के लिए credentials कहां मिलेंगी?` : `Where to find credentials for ${brokerConfigs[activeBroker].name}?`}
+                    </h4>
+                    <p className="text-sm text-emerald-300/70">
+                      {brokerConfigs[activeBroker].instructions}
+                    </p>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-emerald-300/80 mb-2">{isHindi ? 'API Key' : 'API Key'}</label>
+                    <div className="flex items-center">
+                      <input
+                        type={showApiKeys ? "text" : "password"}
+                        value={apiKeys[activeBroker]?.key || ''}
+                        onChange={(e) => setApiKeys(prev => ({
+                          ...prev,
+                          [activeBroker]: { ...prev[activeBroker], key: e.target.value }
+                        }))}
+                        className="flex-1 bg-slate-800/50 border border-emerald-900/40 text-white rounded-xl px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+                        placeholder={isHindi ? 'API Key डालें' : 'Enter API Key'}
+                      />
+                      <button
+                        onClick={() => setShowApiKeys(!showApiKeys)}
+                        className="ml-2 p-3 hover:bg-slate-800/50 rounded-xl transition-colors"
+                        title={showApiKeys ? (isHindi ? 'छुपाएं' : 'Hide') : (isHindi ? 'दिखाएं' : 'Show')}
+                      >
+                        {showApiKeys ? <EyeOff className="w-4 h-4 text-emerald-400" /> : <Eye className="w-4 h-4 text-emerald-400" />}
+                      </button>
                     </div>
                   </div>
-                )}
-
-                {activeBroker !== 'select' && activeBroker in brokerConfigs && (
-                  <>
-                    <div className="bg-gradient-to-r from-blue-50 to-white border border-blue-200 rounded-xl p-4">
-                      <h4 className="font-medium text-blue-800 mb-2 flex items-center">
-                        <AlertCircle className="w-4 h-4 mr-2" />
-                        Where to find credentials for {brokerConfigs[activeBroker].name}?
-                      </h4>
-                      <p className="text-sm text-blue-700">
-                        {brokerConfigs[activeBroker].instructions}
-                      </p>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-emerald-300/80 mb-2">{isHindi ? 'API Secret' : 'API Secret'}</label>
+                    <div className="flex items-center">
+                      <input
+                        type={showApiKeys ? "text" : "password"}
+                        value={apiKeys[activeBroker]?.secret || ''}
+                        onChange={(e) => setApiKeys(prev => ({
+                          ...prev,
+                          [activeBroker]: { ...prev[activeBroker], secret: e.target.value }
+                        }))}
+                        className="flex-1 bg-slate-800/50 border border-emerald-900/40 text-white rounded-xl px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+                        placeholder={isHindi ? 'API Secret डालें' : 'Enter API Secret'}
+                      />
                     </div>
-                    
+                  </div>
+                  
+                  {(activeBroker === 'zerodha' || activeBroker === 'angelone' || activeBroker === 'icicidirect' || activeBroker === 'hdfcsec') && (
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">API Key</label>
-                      <div className="flex items-center">
-                        <input
-                          type={showApiKeys ? "text" : "password"}
-                          value={apiKeys[activeBroker]?.key || ''}
-                          onChange={(e) => setApiKeys(prev => ({
-                            ...prev,
-                            [activeBroker]: { ...prev[activeBroker], key: e.target.value }
-                          }))}
-                          className="flex-1 border border-gray-300 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          placeholder="Enter API Key"
-                        />
-                        <button
-                          onClick={() => setShowApiKeys(!showApiKeys)}
-                          className="ml-2 p-3 hover:bg-gray-100 rounded-xl"
-                          title={showApiKeys ? "Hide" : "Show"}
-                        >
-                          {showApiKeys ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
-                      </div>
+                      <label className="block text-sm font-medium text-emerald-300/80 mb-2">{isHindi ? 'User ID / Client ID' : 'User ID / Client ID'}</label>
+                      <input
+                        type="text"
+                        value={apiKeys[activeBroker]?.userId || ''}
+                        onChange={(e) => setApiKeys(prev => ({
+                          ...prev,
+                          [activeBroker]: { ...prev[activeBroker], userId: e.target.value }
+                        }))}
+                        className="w-full bg-slate-800/50 border border-emerald-900/40 text-white rounded-xl px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+                        placeholder={isHindi ? 'User ID / Client ID डालें' : 'Enter User ID / Client ID'}
+                      />
                     </div>
-                    
+                  )}
+                  
+                  {(activeBroker === 'zerodha' || activeBroker === 'angelone' || activeBroker === 'icicidirect' || activeBroker === 'hdfcsec') && (
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">API Secret</label>
-                      <div className="flex items-center">
-                        <input
-                          type={showApiKeys ? "text" : "password"}
-                          value={apiKeys[activeBroker]?.secret || ''}
-                          onChange={(e) => setApiKeys(prev => ({
-                            ...prev,
-                            [activeBroker]: { ...prev[activeBroker], secret: e.target.value }
-                          }))}
-                          className="flex-1 border border-gray-300 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          placeholder="Enter API Secret"
-                        />
-                      </div>
+                      <label className="block text-sm font-medium text-emerald-300/80 mb-2">{isHindi ? 'PIN / Password' : 'PIN / Password'}</label>
+                      <input
+                        type="password"
+                        value={apiKeys[activeBroker]?.pin || ''}
+                        onChange={(e) => setApiKeys(prev => ({
+                          ...prev,
+                          [activeBroker]: { ...prev[activeBroker], pin: e.target.value }
+                        }))}
+                        className="w-full bg-slate-800/50 border border-emerald-900/40 text-white rounded-xl px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+                        placeholder={isHindi ? 'PIN या Password डालें' : 'Enter PIN or Password'}
+                      />
                     </div>
-                    
-                    {(activeBroker === 'zerodha' || activeBroker === 'angelone' || activeBroker === 'icicidirect' || activeBroker === 'hdfcsec') && (
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">User ID / Client ID</label>
-                        <input
-                          type="text"
-                          value={apiKeys[activeBroker]?.userId || ''}
-                          onChange={(e) => setApiKeys(prev => ({
-                            ...prev,
-                            [activeBroker]: { ...prev[activeBroker], userId: e.target.value }
-                          }))}
-                          className="w-full border border-gray-300 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          placeholder="Enter User ID / Client ID"
-                        />
-                      </div>
-                    )}
-                    
-                    {(activeBroker === 'zerodha' || activeBroker === 'angelone' || activeBroker === 'icicidirect' || activeBroker === 'hdfcsec') && (
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">PIN / Password</label>
-                        <input
-                          type="password"
-                          value={apiKeys[activeBroker]?.pin || ''}
-                          onChange={(e) => setApiKeys(prev => ({
-                            ...prev,
-                            [activeBroker]: { ...prev[activeBroker], pin: e.target.value }
-                          }))}
-                          className="w-full border border-gray-300 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          placeholder="Enter PIN or Password"
-                        />
-                      </div>
-                    )}
-                    
-                    {activeBroker === 'zerodha' && (
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">TOTP (Optional)</label>
-                        <input
-                          type="text"
-                          value={apiKeys[activeBroker]?.totp || ''}
-                          onChange={(e) => setApiKeys(prev => ({
-                            ...prev,
-                            [activeBroker]: { ...prev[activeBroker], totp: e.target.value }
-                          }))}
-                          className="w-full border border-gray-300 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          placeholder="Enter TOTP if required"
-                        />
-                      </div>
-                    )}
-                    
-                    <div className="bg-gradient-to-r from-yellow-50 to-white border border-yellow-200 rounded-xl p-4">
-                      <h4 className="font-medium text-yellow-800 mb-2">Security Notice</h4>
-                      <p className="text-sm text-yellow-700">
-                        • Your API keys are encrypted and stored locally<br/>
-                        • We never store your API secrets on our servers<br/>
-                        • Enable read-only permissions for security<br/>
-                        • Never share your API keys with anyone
-                      </p>
+                  )}
+                  
+                  {activeBroker === 'zerodha' && (
+                    <div>
+                      <label className="block text-sm font-medium text-emerald-300/80 mb-2">TOTP ({isHindi ? 'ऑप्शनल' : 'Optional'})</label>
+                      <input
+                        type="text"
+                        value={apiKeys[activeBroker]?.totp || ''}
+                        onChange={(e) => setApiKeys(prev => ({
+                          ...prev,
+                          [activeBroker]: { ...prev[activeBroker], totp: e.target.value }
+                        }))}
+                        className="w-full bg-slate-800/50 border border-emerald-900/40 text-white rounded-xl px-4 py-3 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+                        placeholder={isHindi ? 'अगर जरूरी हो तो TOTP डालें' : 'Enter TOTP if required'}
+                      />
                     </div>
-                    
-                    <div className="flex space-x-3 pt-4">
-                      <button
-                        onClick={() => {
-                          setActiveBroker(null);
-                          setShowApiKeys(false);
-                        }}
-                        className="flex-1 border border-gray-300 text-gray-700 py-3 px-4 rounded-xl font-medium hover:bg-gray-50"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        onClick={() => handleTestConnection(activeBroker)}
-                        className="flex-1 border border-green-300 text-green-700 py-3 px-4 rounded-xl font-medium hover:bg-green-50"
-                      >
-                        Test Connection
-                      </button>
-                      <button
-                        onClick={() => handleSaveApiKeys(
-                          activeBroker,
-                          apiKeys[activeBroker]?.key,
-                          apiKeys[activeBroker]?.secret,
-                          apiKeys[activeBroker]?.userId,
-                          apiKeys[activeBroker]?.pin
-                        )}
-                        disabled={!apiKeys[activeBroker]?.key || !apiKeys[activeBroker]?.secret}
-                        className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white py-3 px-4 rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {brokerConnections.find(b => b.id === activeBroker)?.status === 'connected' 
-                          ? 'Update Keys' 
-                          : 'Connect Broker'
-                        }
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
+                  )}
+                  
+                  <div className="bg-gradient-to-r from-amber-900/20 to-yellow-900/10 border border-amber-900/40 rounded-xl p-4">
+                    <h4 className="font-medium text-amber-400 mb-2">{isHindi ? 'सुरक्षा नोटिस' : 'Security Notice'}</h4>
+                    <ul className="text-sm text-amber-300/70 space-y-1">
+                      <li>• {isHindi ? 'आपकी API keys एन्क्रिप्टेड और स्थानीय रूप से स्टोर की जाती हैं' : 'Your API keys are encrypted and stored locally'}</li>
+                      <li>• {isHindi ? 'हम आपके API secrets कभी भी अपने servers पर स्टोर नहीं करते' : 'We never store your API secrets on our servers'}</li>
+                      <li>• {isHindi ? 'सुरक्षा के लिए read-only permissions enable करें' : 'Enable read-only permissions for security'}</li>
+                      <li>• {isHindi ? 'अपनी API keys कभी किसी के साथ शेयर न करें' : 'Never share your API keys with anyone'}</li>
+                    </ul>
+                  </div>
+                  
+                  <div className="flex space-x-3 pt-4">
+                    <button
+                      onClick={() => {
+                        setActiveBroker(null);
+                        setShowApiKeys(false);
+                      }}
+                      className="flex-1 border border-emerald-900/40 text-emerald-300 py-3 px-4 rounded-xl font-medium hover:border-emerald-500/60 hover:bg-emerald-900/10 transition-all"
+                    >
+                      {isHindi ? 'कैंसिल' : 'Cancel'}
+                    </button>
+                    <button
+                      onClick={() => handleTestConnection(activeBroker)}
+                      className="flex-1 border border-green-900/40 text-green-300 py-3 px-4 rounded-xl font-medium hover:border-green-500/60 hover:bg-green-900/10 transition-all"
+                    >
+                      {isHindi ? 'कनेक्शन टेस्ट' : 'Test Connection'}
+                    </button>
+                    <button
+                      onClick={() => handleSaveApiKeys(
+                        activeBroker,
+                        apiKeys[activeBroker]?.key,
+                        apiKeys[activeBroker]?.secret,
+                        apiKeys[activeBroker]?.userId,
+                        apiKeys[activeBroker]?.pin
+                      )}
+                      disabled={!apiKeys[activeBroker]?.key || !apiKeys[activeBroker]?.secret}
+                      className="flex-1 bg-gradient-to-r from-emerald-600 to-cyan-600 hover:from-emerald-700 hover:to-cyan-700 text-white py-3 px-4 rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                    >
+                      {brokerConnections.find(b => b.id === activeBroker)?.status === 'connected' 
+                        ? (isHindi ? 'Keys अपडेट करें' : 'Update Keys') 
+                        : (isHindi ? 'ब्रोकर कनेक्ट करें' : 'Connect Broker')
+                      }
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -1294,29 +1444,29 @@ const BrokerSettings = () => {
 
       {/* No Holdings State */}
       {connectedCount > 0 && holdings.length === 0 && (
-        <div className="bg-gradient-to-br from-gray-50 to-white rounded-2xl border border-gray-200 p-8 text-center">
-          <div className="w-16 h-16 mx-auto bg-blue-100 rounded-full flex items-center justify-center mb-6">
-            <Database className="w-8 h-8 text-blue-600" />
+        <div className="bg-gradient-to-br from-slate-800/40 to-slate-900/30 rounded-2xl border border-emerald-900/40 p-8 text-center">
+          <div className="w-16 h-16 mx-auto bg-emerald-900/20 rounded-full flex items-center justify-center mb-6 border border-emerald-900/40">
+            <Database className="w-8 h-8 text-emerald-400" />
           </div>
-          <h3 className="text-xl font-bold text-gray-800 mb-2">No Holdings Found</h3>
-          <p className="text-gray-600 mb-6 max-w-md mx-auto">
-            Your connected brokers don't have any holdings or you need to sync to load them.
+          <h3 className="text-xl font-bold text-white mb-2">{isHindi ? 'कोई होल्डिंग्स नहीं मिली' : 'No Holdings Found'}</h3>
+          <p className="text-emerald-300/70 mb-6 max-w-md mx-auto">
+            {isHindi ? 'आपके कनेक्टेड ब्रोकरों के पास कोई होल्डिंग्स नहीं हैं या आपको उन्हें लोड करने के लिए सिंक करने की जरूरत है।' : 'Your connected brokers don\'t have any holdings or you need to sync to load them.'}
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <button 
               onClick={handleSyncAll}
               disabled={isSyncing}
-              className="inline-flex items-center space-x-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-6 py-3 rounded-xl font-medium disabled:opacity-50"
+              className="inline-flex items-center space-x-2 px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-600/20 to-cyan-600/20 border border-emerald-500/30 text-emerald-300 hover:border-emerald-400/50 font-medium disabled:opacity-50 transition-all"
             >
               <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
-              <span>{isSyncing ? 'Syncing...' : 'Sync Holdings'}</span>
+              <span>{isSyncing ? (isHindi ? 'सिंक हो रहा...' : 'Syncing...') : (isHindi ? 'होल्डिंग्स सिंक करें' : 'Sync Holdings')}</span>
             </button>
             <button 
               onClick={() => setActiveBroker('select')}
-              className="inline-flex items-center space-x-2 border border-gray-300 text-gray-700 hover:bg-gray-50 px-6 py-3 rounded-xl font-medium"
+              className="inline-flex items-center space-x-2 border border-emerald-900/40 text-emerald-300 hover:border-emerald-500/60 hover:bg-emerald-900/10 px-6 py-3 rounded-xl font-medium transition-all"
             >
               <Plus className="w-4 h-4" />
-              <span>Connect Another Broker</span>
+              <span>{isHindi ? 'एक और ब्रोकर कनेक्ट करें' : 'Connect Another Broker'}</span>
             </button>
           </div>
         </div>
