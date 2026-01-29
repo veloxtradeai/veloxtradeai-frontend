@@ -1,5 +1,3 @@
-[file name]: api.js
-[file content begin]
 // ============================================
 // VELOXTRADEAI - REAL API SERVICE
 // UPDATED FOR ACTUAL BACKEND ENDPOINTS
@@ -393,4 +391,3 @@ export default {
     }
   }
 };
-[file content end]
