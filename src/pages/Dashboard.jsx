@@ -1,5 +1,3 @@
-[file name]: Dashboard.jsx
-[file content begin]
 import React, { useState, useEffect, useCallback } from 'react';
 import StockCard from '../components/StockCard';
 import EntryPopup from '../components/EntryPopup';
@@ -877,4 +875,3 @@ const Dashboard = () => {
 };
 
 export default Dashboard;
-[file content end]
