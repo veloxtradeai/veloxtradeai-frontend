@@ -1,5 +1,3 @@
-[file name]: useStocks.jsx
-[file content begin]
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { marketAPI, tradingAPI, portfolioAPI } from '../services/api';
 
@@ -370,4 +368,3 @@ export const StocksProvider = ({ children }) => {
     </StocksContext.Provider>
   );
 };
-[file content end]
