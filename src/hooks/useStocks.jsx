@@ -46,87 +46,61 @@ export const StocksProvider = ({ children }) => {
   };
 
   // Load stocks from backend - REAL DATA
-  const loadStocks = async () => {
-    if (!backendConnected) {
-      console.log('Backend not connected, skipping stock load');
-      setLoading(false);
-      return;
-    }
+// useStocks.jsx में loadStocks function update करो:
 
-    setLoading(true);
-    setError(null);
+const loadStocks = async () => {
+  if (!backendConnected) {
+    console.log('Backend not connected, skipping stock load');
+    setLoading(false);
+    return;
+  }
 
-    try {
-      // First try AI signals endpoint
-      let response = await tradingAPI.getAISignals();
+  setLoading(true);
+  setError(null);
+
+  try {
+    // पहले AI signals try करो
+    let response = await tradingAPI.getAISignals();
+    
+    if (response && response.success && response.data) {
+      console.log(`✅ Loaded ${response.data.length} AI signals`);
+      setStocks(response.data);
+    } else {
+      // AI signals नहीं मिले तो top gainers लो
+      console.log('No AI signals, loading top gainers...');
+      const topGainersResponse = await marketAPI.getTopGainers();
       
-      if (response && response.success) {
-        // Handle different response formats
-        let stockList = [];
+      if (topGainersResponse && topGainersResponse.success && topGainersResponse.gainers) {
+        // Format data properly
+        const formattedStocks = topGainersResponse.gainers.map(gainer => ({
+          symbol: gainer.symbol,
+          name: gainer.symbol, // या कोई name mapping करो
+          currentPrice: gainer.last_price,
+          changePercent: gainer.change_percent,
+          signal: 'buy', // Default
+          confidence: '85%', // Default
+          volume: gainer.volume,
+          high: gainer.high,
+          low: gainer.low,
+          previousClose: gainer.prev_close
+        }));
         
-        if (Array.isArray(response.signals)) {
-          stockList = response.signals;
-        } else if (response.data && Array.isArray(response.data)) {
-          stockList = response.data;
-        } else if (Array.isArray(response)) {
-          stockList = response;
-        }
-        
-        // If we got stocks, set them
-        if (stockList.length > 0) {
-          console.log(`✅ Loaded ${stockList.length} stocks from backend`);
-          setStocks(stockList);
-          
-          // Also get real-time data for these stocks
-          const symbols = stockList.map(s => s.symbol).join(',');
-          if (symbols) {
-            const realTimeResponse = await marketAPI.getLiveData(symbols);
-            if (realTimeResponse && realTimeResponse.success && realTimeResponse.data) {
-              setRealTimeData(realTimeResponse.data);
-            }
-          }
-        } else {
-          // If no AI signals, try top gainers
-          console.log('No AI signals, trying top gainers...');
-          const topGainersResponse = await marketAPI.getTopGainers();
-          if (topGainersResponse && topGainersResponse.success && topGainersResponse.data) {
-            setStocks(topGainersResponse.data);
-          } else {
-            // Fallback to default stocks
-            const defaultSymbols = ['RELIANCE', 'TCS', 'HDFCBANK', 'INFY', 'ICICIBANK'];
-            const promises = defaultSymbols.map(symbol => marketAPI.getStockSignal(symbol));
-            const results = await Promise.all(promises);
-            
-            const validStocks = results.filter(r => r && r.success).map(r => ({
-              symbol: r.symbol,
-              name: r.symbol,
-              currentPrice: r.market_data?.last_price || 0,
-              changePercent: r.market_data?.change || 0,
-              signal: r.ai_signal?.action || 'neutral',
-              confidence: r.ai_signal?.confidence || '0%',
-              volume: r.market_data?.volume || 0,
-              high: r.market_data?.high || 0,
-              low: r.market_data?.low || 0
-            }));
-            
-            setStocks(validStocks);
-          }
-        }
+        console.log(`✅ Loaded ${formattedStocks.length} gainers`);
+        setStocks(formattedStocks);
       } else {
-        console.warn('AI signals endpoint returned no data');
-        // Set empty array to show no data message
+        // Final fallback
         setStocks([]);
       }
-    } catch (err) {
-      console.error('❌ Stocks loading error:', err);
-      setError('Failed to load stocks from backend. Please try again.');
-      setStocks([]);
-      setRealTimeData({});
-    } finally {
-      setLoading(false);
     }
-  };
-
+  } catch (err) {
+    console.error('❌ Stocks loading error:', err);
+    setError('Failed to load stocks from backend.');
+    setStocks([]);
+  } finally {
+    setLoading(false);
+  }
+};
+  
   const loadPortfolio = async () => {
     try {
       const response = await portfolioAPI.getAnalytics();
