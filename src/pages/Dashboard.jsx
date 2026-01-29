@@ -1,10 +1,12 @@
+[file name]: Dashboard.jsx
+[file content begin]
 import React, { useState, useEffect, useCallback } from 'react';
 import StockCard from '../components/StockCard';
 import EntryPopup from '../components/EntryPopup';
 import ExitPopup from '../components/ExitPopup';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useStocks } from '../hooks/useStocks';
-import { portfolioAPI, tradeAPI, brokerAPI } from '../services/api';
+import { portfolioAPI, tradeAPI, brokerAPI, marketAPI } from '../services/api';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -34,9 +36,9 @@ import {
 
 const Dashboard = () => {
   const { t, isHindi, language } = useLanguage();
-  const { stocks, loading, refreshStocks, marketStatus } = useStocks();
+  const { stocks, loading, refreshStocks, marketStatus, portfolioStats, getTopMovers } = useStocks();
   
-  // REAL STATE - NO FAKE DATA
+  // FIXED: Safer state initialization
   const [realPortfolio, setRealPortfolio] = useState({
     totalValue: 0,
     dailyPnL: 0,
@@ -65,60 +67,88 @@ const Dashboard = () => {
     api: false
   });
 
-  // SAFE number formatter
+  // FIXED: Safer safeToFixed function
   const safeToFixed = (value, decimals = 2) => {
-    if (value === undefined || value === null || isNaN(Number(value))) {
+    if (value === undefined || value === null || value === '' || isNaN(Number(value))) {
       return '0.00';
     }
     return Number(value).toFixed(decimals);
   };
 
-  // FORMAT currency
+  // FIXED: Safer formatCurrency - toLowerCase error fix
   const formatCurrency = (amount) => {
-    if (amount === undefined || amount === null) return '₹0';
-    const num = parseFloat(amount);
-    return `₹${num.toLocaleString('en-IN', { 
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2 
-    })}`;
+    if (amount === undefined || amount === null || amount === '') {
+      return '₹0';
+    }
+    try {
+      const num = parseFloat(amount);
+      if (isNaN(num)) return '₹0';
+      
+      return `₹${num.toLocaleString('en-IN', { 
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2 
+      })}`;
+    } catch (error) {
+      console.error('formatCurrency error:', error);
+      return '₹0';
+    }
   };
 
-  // REAL DATA FETCH
+  // FIXED: Simplified real data fetch - only essential calls
   const fetchRealData = useCallback(async () => {
     try {
       console.log('🔄 Fetching real data...');
       
-      // 1. Portfolio data
-      const portfolioResponse = await portfolioAPI.getAnalytics();
-      if (portfolioResponse.success && portfolioResponse.portfolio) {
-        setRealPortfolio({
-          totalValue: portfolioResponse.portfolio.totalValue || 0,
-          dailyPnL: portfolioResponse.portfolio.dailyPnL || 0,
-          winRate: portfolioResponse.portfolio.winRate || '0%',
-          activeTrades: portfolioResponse.portfolio.activeTrades || 0,
-          holdingsCount: portfolioResponse.portfolio.holdingsCount || 0,
-          investedValue: portfolioResponse.portfolio.investedValue || 0,
-          returnsPercent: portfolioResponse.portfolio.returnsPercent || 0
-        });
+      // 1. First check backend health
+      const healthResponse = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/health`);
+      const healthData = await healthResponse.json();
+      
+      if (healthResponse.ok && healthData.status === 'online') {
+        setIsBackendConnected(true);
+        setConnectionStatus(prev => ({ ...prev, api: true }));
+        
+        // 2. Try to get market data
+        try {
+          const marketResponse = await marketAPI.getLiveData();
+          if (marketResponse && marketResponse.success) {
+            console.log('✅ Market data loaded');
+          }
+        } catch (marketError) {
+          console.log('⚠️ Market data not available');
+        }
+        
+        // 3. Try portfolio data (with fallback)
+        try {
+          const portfolioResponse = await portfolioAPI.getAnalytics();
+          if (portfolioResponse && portfolioResponse.success && portfolioResponse.portfolio) {
+            setRealPortfolio({
+              totalValue: portfolioResponse.portfolio.totalValue || 0,
+              dailyPnL: portfolioResponse.portfolio.dailyPnL || 0,
+              winRate: portfolioResponse.portfolio.winRate || '0%',
+              activeTrades: portfolioResponse.portfolio.activeTrades || 0,
+              holdingsCount: portfolioResponse.portfolio.holdingsCount || 0,
+              investedValue: portfolioResponse.portfolio.investedValue || 0,
+              returnsPercent: portfolioResponse.portfolio.returnsPercent || 0
+            });
+          }
+        } catch (portfolioError) {
+          console.log('⚠️ Portfolio endpoint not working');
+          // Use hook's portfolio stats as fallback
+          setRealPortfolio({
+            totalValue: portfolioStats.currentValue || 0,
+            dailyPnL: portfolioStats.dailyPnL || 0,
+            winRate: portfolioStats.winRate || '0%',
+            activeTrades: portfolioStats.activeTrades || 0,
+            holdingsCount: portfolioStats.holdingsCount || 0,
+            investedValue: portfolioStats.investedValue || 0,
+            returnsPercent: portfolioStats.returnsPercent || 0
+          });
+        }
+      } else {
+        setIsBackendConnected(false);
+        setConnectionStatus({ broker: false, websocket: false, api: false });
       }
-
-      // 2. Active trades
-      const tradesResponse = await tradeAPI.getTrades();
-      if (tradesResponse.success && tradesResponse.trades) {
-        setRealTrades(tradesResponse.trades);
-      }
-
-      // 3. Broker connection
-      const brokersResponse = await brokerAPI.getBrokers();
-      if (brokersResponse.success && brokersResponse.brokers) {
-        setRealBrokers(brokersResponse.brokers);
-        const connected = brokersResponse.brokers.some(b => b.status === 'connected');
-        setConnectionStatus(prev => ({ ...prev, broker: connected }));
-      }
-
-      // 4. Backend connection check
-      setConnectionStatus(prev => ({ ...prev, api: true }));
-      setIsBackendConnected(true);
+      
       setLastUpdate(new Date());
       
     } catch (error) {
@@ -126,7 +156,7 @@ const Dashboard = () => {
       setIsBackendConnected(false);
       setConnectionStatus({ broker: false, websocket: false, api: false });
     }
-  }, []);
+  }, [portfolioStats]);
 
   // AUTO REFRESH AND DATA FETCH
   useEffect(() => {
@@ -142,8 +172,16 @@ const Dashboard = () => {
 
   // AUTO POPUP FOR HIGH CONFIDENCE STOCKS
   useEffect(() => {
+    if (!stocks || !Array.isArray(stocks)) return;
+    
     const highConfidenceStocks = stocks.filter(
-      stock => stock.confidence >= 90 && stock.signal === 'strong_buy'
+      stock => stock && stock.confidence && stock.signal
+    ).filter(
+      stock => {
+        const confidence = parseFloat(stock.confidence) || 0;
+        const signal = String(stock.signal || '').toLowerCase();
+        return confidence >= 90 && signal.includes('buy');
+      }
     );
     
     if (highConfidenceStocks.length > 0 && connectionStatus.broker) {
@@ -151,76 +189,76 @@ const Dashboard = () => {
       setPopupData({
         stock: topStock,
         action: 'BUY',
-        entry: topStock.currentPrice * 0.99,
-        target: topStock.currentPrice * 1.08,
-        stoploss: topStock.currentPrice * 0.95,
-        quantity: Math.floor(10000 / topStock.currentPrice)
+        entry: (topStock.currentPrice || 0) * 0.99,
+        target: (topStock.currentPrice || 0) * 1.08,
+        stoploss: (topStock.currentPrice || 0) * 0.95,
+        quantity: Math.floor(10000 / (topStock.currentPrice || 1))
       });
     }
   }, [stocks, connectionStatus.broker]);
 
-  // REAL STATS - NO HARDCODED DATA
-  const stats = [
-    { 
-      title: t('portfolioValue') || 'Portfolio Value', 
-      value: formatCurrency(realPortfolio.totalValue), 
-      change: `${realPortfolio.returnsPercent >= 0 ? '+' : ''}${safeToFixed(realPortfolio.returnsPercent)}%`, 
-      icon: <DollarSign className="w-4 h-4 md:w-5 md:h-5" />,
-      color: realPortfolio.returnsPercent >= 0 ? 'text-emerald-400' : 'text-red-400',
-      bgColor: realPortfolio.returnsPercent >= 0 ? 'bg-emerald-500/20' : 'bg-red-500/20',
-      trend: realPortfolio.returnsPercent >= 0 ? 'up' : 'down',
-      borderColor: realPortfolio.returnsPercent >= 0 ? 'border-emerald-500/30' : 'border-red-500/30'
-    },
-    { 
-      title: t('dailyPnL') || 'Daily P&L', 
-      value: `${realPortfolio.dailyPnL >= 0 ? '+' : ''}${formatCurrency(realPortfolio.dailyPnL)}`, 
-      change: t('today') || 'Today', 
-      icon: <TrendingUp className="w-4 h-4 md:w-5 md:h-5" />,
-      color: realPortfolio.dailyPnL >= 0 ? 'text-emerald-400' : 'text-red-400',
-      bgColor: realPortfolio.dailyPnL >= 0 ? 'bg-emerald-500/20' : 'bg-red-500/20',
-      trend: realPortfolio.dailyPnL >= 0 ? 'up' : 'down',
-      borderColor: realPortfolio.dailyPnL >= 0 ? 'border-emerald-500/30' : 'border-red-500/30'
-    },
-    { 
-      title: t('winRate') || 'Win Rate', 
-      value: realPortfolio.winRate, 
-      change: '90%+ Target', 
-      icon: <Target className="w-4 h-4 md:w-5 md:h-5" />,
-      color: 'text-cyan-400',
-      bgColor: 'bg-cyan-500/20',
-      trend: 'up',
-      borderColor: 'border-cyan-500/30'
-    },
-    { 
-      title: t('activeTrades') || 'Active Trades', 
-      value: realPortfolio.activeTrades.toString(), 
-      change: `${realPortfolio.holdingsCount} ${t('holdings') || 'holdings'}`, 
-      icon: <Activity className="w-4 h-4 md:w-5 md:h-5" />,
-      color: 'text-purple-400',
-      bgColor: 'bg-purple-500/20',
-      trend: 'neutral',
-      borderColor: 'border-purple-500/30'
+  // FIXED: Safer stats calculation
+  const stats = React.useMemo(() => {
+    const totalValue = realPortfolio.totalValue || portfolioStats.currentValue || 0;
+    const returnsPercent = realPortfolio.returnsPercent || portfolioStats.returnsPercent || 0;
+    const dailyPnL = realPortfolio.dailyPnL || portfolioStats.dailyPnL || 0;
+    const winRate = realPortfolio.winRate || portfolioStats.winRate || '0%';
+    const activeTrades = realPortfolio.activeTrades || portfolioStats.activeTrades || 0;
+    const holdingsCount = realPortfolio.holdingsCount || portfolioStats.holdingsCount || 0;
+
+    return [
+      { 
+        title: t('portfolioValue') || 'Portfolio Value', 
+        value: formatCurrency(totalValue), 
+        change: `${returnsPercent >= 0 ? '+' : ''}${safeToFixed(returnsPercent)}%`, 
+        icon: <DollarSign className="w-4 h-4 md:w-5 md:h-5" />,
+        color: returnsPercent >= 0 ? 'text-emerald-400' : 'text-red-400',
+        bgColor: returnsPercent >= 0 ? 'bg-emerald-500/20' : 'bg-red-500/20',
+        trend: returnsPercent >= 0 ? 'up' : 'down',
+        borderColor: returnsPercent >= 0 ? 'border-emerald-500/30' : 'border-red-500/30'
+      },
+      { 
+        title: t('dailyPnL') || 'Daily P&L', 
+        value: `${dailyPnL >= 0 ? '+' : ''}${formatCurrency(dailyPnL)}`, 
+        change: t('today') || 'Today', 
+        icon: <TrendingUp className="w-4 h-4 md:w-5 md:h-5" />,
+        color: dailyPnL >= 0 ? 'text-emerald-400' : 'text-red-400',
+        bgColor: dailyPnL >= 0 ? 'bg-emerald-500/20' : 'bg-red-500/20',
+        trend: dailyPnL >= 0 ? 'up' : 'down',
+        borderColor: dailyPnL >= 0 ? 'border-emerald-500/30' : 'border-red-500/30'
+      },
+      { 
+        title: t('winRate') || 'Win Rate', 
+        value: winRate, 
+        change: '90%+ Target', 
+        icon: <Target className="w-4 h-4 md:w-5 md:h-5" />,
+        color: 'text-cyan-400',
+        bgColor: 'bg-cyan-500/20',
+        trend: 'up',
+        borderColor: 'border-cyan-500/30'
+      },
+      { 
+        title: t('activeTrades') || 'Active Trades', 
+        value: activeTrades.toString(), 
+        change: `${holdingsCount} ${t('holdings') || 'holdings'}`, 
+        icon: <Activity className="w-4 h-4 md:w-5 md:h-5" />,
+        color: 'text-purple-400',
+        bgColor: 'bg-purple-500/20',
+        trend: 'neutral',
+        borderColor: 'border-purple-500/30'
+      }
+    ];
+  }, [realPortfolio, portfolioStats, t]);
+
+  // FIXED: Safer top movers
+  const topMovers = React.useMemo(() => {
+    try {
+      return getTopMovers();
+    } catch (error) {
+      console.error('getTopMovers error:', error);
+      return { gainers: [], losers: [] };
     }
-  ];
-
-  // TOP GAINERS/LOSERS
-  const getTopMovers = () => {
-    if (!stocks.length) return { gainers: [], losers: [] };
-    
-    const withRealTime = stocks.map(stock => ({
-      ...stock,
-      change: stock.changePercent || 0
-    }));
-    
-    const sorted = [...withRealTime].sort((a, b) => b.change - a.change);
-    
-    return {
-      gainers: sorted.slice(0, 3),
-      losers: sorted.slice(-3).reverse()
-    };
-  };
-
-  const topMovers = getTopMovers();
+  }, [getTopMovers]);
 
   // TRADE HANDLER - REAL ORDER
   const handleTrade = async (type, data) => {
@@ -254,33 +292,38 @@ const Dashboard = () => {
     }
   };
 
-  // AUTO ADJUST SL/TGT
-  const handleAutoAdjust = async (tradeId, currentPrice) => {
-    try {
-      const result = await tradeAPI.autoAdjust(tradeId, currentPrice);
-      if (result.success) {
-        console.log('✅ SL/TGT updated:', result);
-        fetchRealData();
+  // FILTER STOCKS - SAFE
+  const filteredStocks = React.useMemo(() => {
+    if (!stocks || !Array.isArray(stocks)) return [];
+    
+    return stocks.filter(stock => {
+      if (!stock) return false;
+      
+      if (filters.signal !== 'all') {
+        const stockSignal = String(stock.signal || '').toLowerCase();
+        const filterSignal = filters.signal.toLowerCase();
+        if (!stockSignal.includes(filterSignal)) return false;
       }
-    } catch (error) {
-      console.error('Auto adjust error:', error);
-    }
-  };
-
-  // FILTER STOCKS
-  const filteredStocks = stocks.filter(stock => {
-    if (filters.signal !== 'all' && stock.signal !== filters.signal) return false;
-    if (filters.risk !== 'all' && stock.riskLevel !== filters.risk) return false;
-    if (filters.timeFrame !== 'all' && stock.timeFrame !== filters.timeFrame) return false;
-    return true;
-  });
-
-  const formatTime = (date) => {
-    return date.toLocaleTimeString('en-IN', { 
-      hour: '2-digit', 
-      minute: '2-digit',
-      hour12: true 
+      
+      if (filters.risk !== 'all' && stock.riskLevel !== filters.risk) return false;
+      if (filters.timeFrame !== 'all' && stock.timeFrame !== filters.timeFrame) return false;
+      
+      return true;
     });
+  }, [stocks, filters]);
+
+  // FIXED: Safer formatTime
+  const formatTime = (date) => {
+    try {
+      if (!date || !(date instanceof Date)) return '--:--';
+      return date.toLocaleTimeString('en-IN', { 
+        hour: '2-digit', 
+        minute: '2-digit',
+        hour12: true 
+      });
+    } catch (error) {
+      return '--:--';
+    }
   };
 
   // RESPONSIVE DESIGN - Tailwind classes will handle mobile/desktop
@@ -338,7 +381,7 @@ const Dashboard = () => {
                     (isHindi ? 'बैकेंड डिस्कनेक्टेड' : 'Backend Disconnected')}
                 </h3>
                 <p className="text-xs text-emerald-300/70">
-                  {isHindi ? 'ब्रोकर्स:' : 'Brokers:'} {realBrokers.filter(b => b.status === 'connected').length} {isHindi ? 'कनेक्टेड' : 'Connected'}
+                  {isHindi ? 'बैकेंड:' : 'Backend:'} {isBackendConnected ? (isHindi ? 'सक्रिय' : 'Active') : (isHindi ? 'निष्क्रिय' : 'Inactive')}
                 </p>
               </div>
             </div>
@@ -408,7 +451,7 @@ const Dashboard = () => {
           </div>
           
           <div className="space-y-3">
-            {topMovers.gainers.map((stock, index) => (
+            {(topMovers.gainers || []).map((stock, index) => (
               <div 
                 key={index} 
                 className="flex items-center justify-between p-3 rounded-xl bg-gradient-to-r from-emerald-900/10 to-emerald-800/5 border border-emerald-900/30 hover:border-emerald-500/40 transition-all"
@@ -428,8 +471,8 @@ const Dashboard = () => {
                     </span>
                   </div>
                   <div>
-                    <p className="font-medium text-white">{stock.symbol}</p>
-                    <p className="text-xs text-emerald-300/60">{stock.name || stock.symbol}</p>
+                    <p className="font-medium text-white">{stock.symbol || 'N/A'}</p>
+                    <p className="text-xs text-emerald-300/60">{stock.name || stock.symbol || 'Unknown'}</p>
                   </div>
                 </div>
                 <div className="text-right">
@@ -440,6 +483,12 @@ const Dashboard = () => {
                 </div>
               </div>
             ))}
+            
+            {(topMovers.gainers || []).length === 0 && (
+              <div className="text-center py-4">
+                <p className="text-emerald-300/60">{isHindi ? 'डेटा उपलब्ध नहीं' : 'No data available'}</p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -461,7 +510,7 @@ const Dashboard = () => {
           </div>
           
           <div className="space-y-3">
-            {topMovers.losers.map((stock, index) => (
+            {(topMovers.losers || []).map((stock, index) => (
               <div 
                 key={index} 
                 className="flex items-center justify-between p-3 rounded-xl bg-gradient-to-r from-red-900/10 to-red-800/5 border border-red-900/30 hover:border-red-500/40 transition-all"
@@ -471,8 +520,8 @@ const Dashboard = () => {
                     <span className="text-sm font-bold text-slate-400">#{index + 1}</span>
                   </div>
                   <div>
-                    <p className="font-medium text-white">{stock.symbol}</p>
-                    <p className="text-xs text-red-300/60">{stock.name || stock.symbol}</p>
+                    <p className="font-medium text-white">{stock.symbol || 'N/A'}</p>
+                    <p className="text-xs text-red-300/60">{stock.name || stock.symbol || 'Unknown'}</p>
                   </div>
                 </div>
                 <div className="text-right">
@@ -483,6 +532,12 @@ const Dashboard = () => {
                 </div>
               </div>
             ))}
+            
+            {(topMovers.losers || []).length === 0 && (
+              <div className="text-center py-4">
+                <p className="text-red-300/60">{isHindi ? 'डेटा उपलब्ध नहीं' : 'No data available'}</p>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -518,7 +573,7 @@ const Dashboard = () => {
               <TrendingUp className="w-4 h-4" />
               <span>{isHindi ? 'एक्टिव ट्रेड्स' : 'Active Trades'}</span>
               <span className="ml-2 px-2 py-0.5 bg-purple-500/20 text-purple-400 text-xs rounded-full">
-                {realPortfolio.activeTrades}
+                {realPortfolio.activeTrades || 0}
               </span>
             </button>
             
@@ -624,14 +679,16 @@ const Dashboard = () => {
                 <div>
                   {filteredStocks.length > 0 ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {filteredStocks.map((stock) => (
-                        <StockCard
-                          key={stock.symbol}
-                          stock={stock}
-                          onTrade={handleTrade}
-                          connectionStatus={connectionStatus}
-                          isHindi={isHindi}
-                        />
+                      {filteredStocks.map((stock, index) => (
+                        stock && (
+                          <StockCard
+                            key={stock.symbol || index}
+                            stock={stock}
+                            onTrade={handleTrade}
+                            connectionStatus={connectionStatus}
+                            isHindi={isHindi}
+                          />
+                        )
                       ))}
                     </div>
                   ) : (
@@ -659,11 +716,11 @@ const Dashboard = () => {
                   <h3 className="text-lg font-bold text-white">{isHindi ? 'एक्टिव ट्रेड्स' : 'Active Trades'}</h3>
                 </div>
                 <span className="px-3 py-1 bg-gradient-to-r from-emerald-600/20 to-cyan-600/20 text-emerald-400 text-sm rounded-full border border-emerald-500/30">
-                  {realPortfolio.activeTrades} {isHindi ? 'ट्रेड्स' : 'trades'}
+                  {realPortfolio.activeTrades || 0} {isHindi ? 'ट्रेड्स' : 'trades'}
                 </span>
               </div>
               
-              {realPortfolio.activeTrades > 0 && realTrades.length > 0 ? (
+              {(realPortfolio.activeTrades || 0) > 0 && realTrades.length > 0 ? (
                 <div className="overflow-x-auto rounded-xl border border-emerald-900/40">
                   <table className="w-full min-w-max">
                     <thead>
@@ -820,3 +877,4 @@ const Dashboard = () => {
 };
 
 export default Dashboard;
+[file content end]
