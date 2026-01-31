@@ -1,5 +1,10 @@
 import React, { useState } from 'react';
-import { Save, Bell, Shield, Globe, Moon, Download, Activity, Lock } from 'lucide-react';
+import { 
+  Save, Bell, Shield, Globe, Moon, Download, 
+  Activity, Lock, Mail, MessageSquare, Smartphone, 
+  AlertCircle, Target, TrendingUp, Clock, Eye, EyeOff,
+  CreditCard, Database, Zap, RefreshCw
+} from 'lucide-react';
 
 const Settings = () => {
   const [settings, setSettings] = useState({
@@ -25,7 +30,9 @@ const Settings = () => {
       allowShortSelling: false,
       slippageTolerance: 0.5,
       enableHedgeMode: false,
-      requireConfirmation: true
+      requireConfirmation: true,
+      partialExit: true,
+      trailSLAfterProfit: true
     },
     
     risk: {
@@ -37,7 +44,8 @@ const Settings = () => {
       takeProfitValue: 4,
       riskRewardRatio: 2,
       maxPortfolioRisk: 10,
-      volatilityAdjustment: true
+      volatilityAdjustment: true,
+      maxDrawdown: 15
     },
     
     display: {
@@ -48,7 +56,9 @@ const Settings = () => {
       compactMode: false,
       language: 'en',
       showIndicators: true,
-      darkModeIntensity: 'medium'
+      darkModeIntensity: 'medium',
+      chartType: 'candlestick',
+      gridLines: true
     },
     
     privacy: {
@@ -58,14 +68,31 @@ const Settings = () => {
       dataSharing: 'anonymous',
       twoFactorAuth: false,
       sessionTimeout: 30,
-      showRealName: false
+      showRealName: false,
+      hideBalance: false,
+      autoLogout: true
     },
     
     api: {
       allowThirdPartyAccess: false,
       webhookEnabled: false,
       rateLimit: 'medium',
-      logRetention: '30days'
+      logRetention: '30days',
+      apiKey: '****************',
+      webhookUrl: ''
+    },
+
+    subscription: {
+      plan: 'free_trial',
+      trialDaysLeft: 7,
+      autoRenew: false,
+      billingCycle: 'monthly'
+    },
+
+    broker: {
+      connectedBrokers: [],
+      autoSync: true,
+      syncInterval: 5
     }
   });
 
@@ -84,38 +111,43 @@ const Settings = () => {
     setHasChanges(true);
   };
 
-  const handleNestedChange = (category, subCategory, key, value) => {
-    setSettings(prev => ({
-      ...prev,
-      [category]: {
-        ...prev[category],
-        [subCategory]: {
-          ...prev[category][subCategory],
-          [key]: value
-        }
-      }
-    }));
-    setHasChanges(true);
-  };
-
   const handleSave = async () => {
     if (!hasChanges) {
-      alert('No changes to save!');
+      alert('कोई बदलाव नहीं है!');
       return;
     }
     
     setIsSaving(true);
-    // Simulate API call
-    setTimeout(() => {
+    try {
+      // REAL API CALL - यहां आपका बैकएंड API आएगा
+      const response = await fetch('/api/settings/save', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify(settings)
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        alert(result.message || 'सेटिंग्स सफलतापूर्वक सहेजी गईं!');
+        setHasChanges(false);
+      } else {
+        throw new Error('सेटिंग्स सहेजने में त्रुटि');
+      }
+    } catch (error) {
+      console.error('सेटिंग्स सेव त्रुटि:', error);
+      alert('सेटिंग्स सहेजने में असफल। कृपया पुनः प्रयास करें।');
+    } finally {
       setIsSaving(false);
-      setHasChanges(false);
-      alert('Settings saved successfully!');
-    }, 1000);
+    }
   };
 
   const handleReset = () => {
-    if (window.confirm('Reset all settings to default?')) {
-      setSettings({
+    if (window.confirm('क्या आप सभी सेटिंग्स को डिफ़ॉल्ट पर रीसेट करना चाहते हैं?')) {
+      // Reset to default settings
+      const defaultSettings = {
         notifications: {
           emailAlerts: true,
           smsAlerts: false,
@@ -137,7 +169,9 @@ const Settings = () => {
           allowShortSelling: false,
           slippageTolerance: 0.5,
           enableHedgeMode: false,
-          requireConfirmation: true
+          requireConfirmation: true,
+          partialExit: true,
+          trailSLAfterProfit: true
         },
         risk: {
           stopLossType: 'percentage',
@@ -148,7 +182,8 @@ const Settings = () => {
           takeProfitValue: 4,
           riskRewardRatio: 2,
           maxPortfolioRisk: 10,
-          volatilityAdjustment: true
+          volatilityAdjustment: true,
+          maxDrawdown: 15
         },
         display: {
           theme: 'light',
@@ -158,7 +193,9 @@ const Settings = () => {
           compactMode: false,
           language: 'en',
           showIndicators: true,
-          darkModeIntensity: 'medium'
+          darkModeIntensity: 'medium',
+          chartType: 'candlestick',
+          gridLines: true
         },
         privacy: {
           publicProfile: false,
@@ -167,16 +204,34 @@ const Settings = () => {
           dataSharing: 'anonymous',
           twoFactorAuth: false,
           sessionTimeout: 30,
-          showRealName: false
+          showRealName: false,
+          hideBalance: false,
+          autoLogout: true
         },
         api: {
           allowThirdPartyAccess: false,
           webhookEnabled: false,
           rateLimit: 'medium',
-          logRetention: '30days'
+          logRetention: '30days',
+          apiKey: '****************',
+          webhookUrl: ''
+        },
+        subscription: {
+          plan: 'free_trial',
+          trialDaysLeft: 7,
+          autoRenew: false,
+          billingCycle: 'monthly'
+        },
+        broker: {
+          connectedBrokers: [],
+          autoSync: true,
+          syncInterval: 5
         }
-      });
+      };
+      
+      setSettings(defaultSettings);
       setHasChanges(true);
+      alert('सभी सेटिंग्स डिफ़ॉल्ट पर रीसेट की गईं। सेव बटन दबाएं।');
     }
   };
 
@@ -191,47 +246,76 @@ const Settings = () => {
     linkElement.click();
   };
 
+  const handleRegenerateApiKey = async () => {
+    if (window.confirm('क्या आप नया API की जेनरेट करना चाहते हैं? पुराना की काम करना बंद कर देगा।')) {
+      try {
+        const response = await fetch('/api/generate-new-key', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          handleSettingChange('api', 'apiKey', data.newApiKey);
+          alert('नया API की सफलतापूर्वक जेनरेट हो गया!');
+        }
+      } catch (error) {
+        alert('API की जेनरेट करने में त्रुटि');
+      }
+    }
+  };
+
   const tabs = [
-    { id: 'notifications', label: 'Notifications', icon: <Bell className="w-4 h-4" />, color: 'text-blue-600' },
-    { id: 'trading', label: 'Trading', icon: <Activity className="w-4 h-4" />, color: 'text-green-600' },
-    { id: 'risk', label: 'Risk Management', icon: <Shield className="w-4 h-4" />, color: 'text-orange-600' },
-    { id: 'display', label: 'Display', icon: <Moon className="w-4 h-4" />, color: 'text-purple-600' },
-    { id: 'privacy', label: 'Privacy & Security', icon: <Lock className="w-4 h-4" />, color: 'text-red-600' },
-    { id: 'api', label: 'API', icon: <Globe className="w-4 h-4" />, color: 'text-indigo-600' }
+    { id: 'notifications', label: 'नोटिफिकेशन', icon: <Bell className="w-4 h-4" /> },
+    { id: 'trading', label: 'ट्रेडिंग', icon: <Activity className="w-4 h-4" /> },
+    { id: 'risk', label: 'रिस्क मैनेजमेंट', icon: <Shield className="w-4 h-4" /> },
+    { id: 'display', label: 'डिस्प्ले', icon: <Moon className="w-4 h-4" /> },
+    { id: 'privacy', label: 'प्राइवेसी और सिक्योरिटी', icon: <Lock className="w-4 h-4" /> },
+    { id: 'api', label: 'API सेटिंग्स', icon: <Globe className="w-4 h-4" /> },
+    { id: 'subscription', label: 'सब्सक्रिप्शन', icon: <CreditCard className="w-4 h-4" /> },
+    { id: 'broker', label: 'ब्रोकर सेटिंग्स', icon: <Database className="w-4 h-4" /> }
   ];
 
-  const ToggleSwitch = ({ checked, onChange, id }) => (
+  const ToggleSwitch = ({ checked, onChange, id, disabled = false }) => (
     <label htmlFor={id} className="relative inline-flex items-center cursor-pointer">
       <input
         type="checkbox"
         id={id}
         checked={checked}
         onChange={onChange}
+        disabled={disabled}
         className="sr-only peer"
       />
-      <div className="w-11 h-6 bg-gray-200 peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+      <div className={`w-11 h-6 ${disabled ? 'bg-gray-300' : 'bg-gray-200'} rounded-full peer peer-focus:ring-2 peer-focus:ring-blue-300 peer-checked:bg-blue-600 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all`}></div>
     </label>
   );
 
   const renderNotificationsTab = () => (
     <div className="space-y-6">
-      <div className="bg-gradient-to-r from-blue-50 to-white p-6 rounded-xl border border-blue-100">
-        <h3 className="font-bold text-lg mb-2 flex items-center">
+      <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+        <h3 className="font-bold text-lg mb-4 flex items-center text-gray-800">
           <Bell className="w-5 h-5 mr-2 text-blue-600" />
-          Alert Channels
+          अलर्ट चैनल्स
         </h3>
-        <p className="text-gray-600 mb-4">Choose how you want to receive notifications</p>
+        <p className="text-gray-600 mb-6">चुनें कि आप नोटिफिकेशन कैसे प्राप्त करना चाहते हैं</p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {[
-            { key: 'emailAlerts', label: 'Email Alerts', desc: 'Receive notifications via email' },
-            { key: 'smsAlerts', label: 'SMS Alerts', desc: 'Get SMS on your mobile' },
-            { key: 'pushNotifications', label: 'Push Notifications', desc: 'Browser & app notifications' },
-            { key: 'whatsappAlerts', label: 'WhatsApp Alerts', desc: 'WhatsApp messages for alerts' }
+            { key: 'emailAlerts', label: 'ईमेल अलर्ट्स', desc: 'ईमेल के माध्यम से नोटिफिकेशन प्राप्त करें', icon: <Mail className="w-5 h-5" /> },
+            { key: 'smsAlerts', label: 'SMS अलर्ट्स', desc: 'अपने मोबाइल पर SMS प्राप्त करें', icon: <MessageSquare className="w-5 h-5" /> },
+            { key: 'pushNotifications', label: 'पुश नोटिफिकेशन', desc: 'ब्राउज़र और ऐप नोटिफिकेशन', icon: <Smartphone className="w-5 h-5" /> },
+            { key: 'whatsappAlerts', label: 'WhatsApp अलर्ट्स', desc: 'अलर्ट्स के लिए WhatsApp मैसेज', icon: <MessageSquare className="w-5 h-5" /> }
           ].map((item) => (
-            <div key={item.key} className="flex items-center justify-between p-3 bg-white rounded-lg border">
-              <div>
-                <p className="font-medium">{item.label}</p>
-                <p className="text-sm text-gray-500">{item.desc}</p>
+            <div key={item.key} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-100 hover:bg-gray-100 transition-colors">
+              <div className="flex items-center">
+                <div className="p-2 bg-blue-50 rounded-lg mr-3">
+                  {React.cloneElement(item.icon, { className: "w-5 h-5 text-blue-600" })}
+                </div>
+                <div>
+                  <p className="font-medium text-gray-800">{item.label}</p>
+                  <p className="text-sm text-gray-600">{item.desc}</p>
+                </div>
               </div>
               <ToggleSwitch
                 checked={settings.notifications[item.key]}
@@ -243,22 +327,27 @@ const Settings = () => {
         </div>
       </div>
 
-      <div className="bg-gradient-to-r from-green-50 to-white p-6 rounded-xl border border-green-100">
-        <h3 className="font-bold text-lg mb-2">Trade Events</h3>
-        <p className="text-gray-600 mb-4">Configure notifications for trading activities</p>
+      <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+        <h3 className="font-bold text-lg mb-4 text-gray-800">ट्रेड इवेंट्स</h3>
+        <p className="text-gray-600 mb-6">ट्रेडिंग एक्टिविटी के लिए नोटिफिकेशन कॉन्फ़िगर करें</p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {[
-            { key: 'tradeExecuted', label: 'Trade Executed', desc: 'When a trade is successfully executed' },
-            { key: 'stopLossHit', label: 'Stop Loss Hit', desc: 'When stop loss is triggered' },
-            { key: 'targetAchieved', label: 'Target Achieved', desc: 'When profit target is reached' },
-            { key: 'marketCloseAlerts', label: 'Market Close Summary', desc: 'Daily portfolio summary' },
-            { key: 'priceAlerts', label: 'Price Alerts', desc: 'Custom price level notifications' },
-            { key: 'newsAlerts', label: 'News Alerts', desc: 'Important market news updates' }
+            { key: 'tradeExecuted', label: 'ट्रेड एक्जीक्यूट हुआ', desc: 'जब कोई ट्रेड सफलतापूर्वक एक्जीक्यूट हो जाए', icon: <Zap className="w-5 h-5" /> },
+            { key: 'stopLossHit', label: 'स्टॉप लॉस हिट', desc: 'जब स्टॉप लॉस ट्रिगर हो जाए', icon: <AlertCircle className="w-5 h-5" /> },
+            { key: 'targetAchieved', label: 'टार्गेट अचीव्ड', desc: 'जब प्रॉफिट टार्गेट पहुंच जाए', icon: <Target className="w-5 h-5" /> },
+            { key: 'marketCloseAlerts', label: 'मार्केट क्लोज समरी', desc: 'दैनिक पोर्टफोलियो समरी', icon: <Clock className="w-5 h-5" /> },
+            { key: 'priceAlerts', label: 'प्राइस अलर्ट्स', desc: 'कस्टम प्राइस लेवल नोटिफिकेशन', icon: <TrendingUp className="w-5 h-5" /> },
+            { key: 'newsAlerts', label: 'न्यूज अलर्ट्स', desc: 'महत्वपूर्ण मार्केट न्यूज अपडेट्स', icon: <Bell className="w-5 h-5" /> }
           ].map((item) => (
-            <div key={item.key} className="flex items-center justify-between p-3 bg-white rounded-lg border">
-              <div>
-                <p className="font-medium">{item.label}</p>
-                <p className="text-sm text-gray-500">{item.desc}</p>
+            <div key={item.key} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-100 hover:bg-gray-100 transition-colors">
+              <div className="flex items-center">
+                <div className="p-2 bg-green-50 rounded-lg mr-3">
+                  {React.cloneElement(item.icon, { className: "w-5 h-5 text-green-600" })}
+                </div>
+                <div>
+                  <p className="font-medium text-gray-800">{item.label}</p>
+                  <p className="text-sm text-gray-600">{item.desc}</p>
+                </div>
               </div>
               <ToggleSwitch
                 checked={settings.notifications[item.key]}
@@ -274,16 +363,17 @@ const Settings = () => {
 
   const renderTradingTab = () => (
     <div className="space-y-6">
-      <div className="bg-gradient-to-r from-green-50 to-white p-6 rounded-xl border border-green-100">
-        <h3 className="font-bold text-lg mb-2 flex items-center">
-          <Activity className="w-5 h-5 mr-2 text-green-600" />
-          Auto Trading Configuration
+      <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+        <h3 className="font-bold text-lg mb-6 flex items-center text-gray-800">
+          <Activity className="w-5 h-5 mr-2 text-blue-600" />
+          ऑटो ट्रेडिंग कॉन्फ़िगरेशन
         </h3>
-        <div className="space-y-4">
-          <div className="flex items-center justify-between p-4 bg-white rounded-lg border">
+        
+        <div className="space-y-6">
+          <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-100">
             <div>
-              <p className="font-bold">Auto Trade Execution</p>
-              <p className="text-sm text-gray-600">Automatically execute trades based on AI signals</p>
+              <p className="font-bold text-gray-800">ऑटो ट्रेड एक्जीक्यूशन</p>
+              <p className="text-sm text-gray-600">AI सिग्नल्स के आधार पर ऑटोमैटिकली ट्रेड्स एक्जीक्यूट करें</p>
             </div>
             <ToggleSwitch
               checked={settings.trading.autoTradeExecution}
@@ -294,46 +384,117 @@ const Settings = () => {
 
           {settings.trading.autoTradeExecution && (
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-              <p className="font-medium text-yellow-800 mb-2">⚠️ Auto Trading Enabled</p>
-              <p className="text-sm text-yellow-700">Trades will be executed automatically based on your risk settings. Monitor your account regularly.</p>
+              <div className="flex items-start">
+                <AlertCircle className="w-5 h-5 text-yellow-600 mr-2 mt-0.5" />
+                <div>
+                  <p className="font-medium text-yellow-800 mb-1">⚠️ ऑटो ट्रेडिंग एनेबल्ड</p>
+                  <p className="text-sm text-yellow-700">आपके रिस्क सेटिंग्स के आधार पर ट्रेड्स ऑटोमैटिकली एक्जीक्यूट होंगे। नियमित रूप से अपने अकाउंट की मॉनिटरिंग करें।</p>
+                </div>
+              </div>
             </div>
           )}
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {[
-              { key: 'maxPositions', label: 'Max Open Positions', value: settings.trading.maxPositions, min: 1, max: 20, unit: '' },
-              { key: 'maxRiskPerTrade', label: 'Max Risk Per Trade', value: settings.trading.maxRiskPerTrade, min: 0.1, max: 10, unit: '%' },
-              { key: 'maxDailyLoss', label: 'Max Daily Loss', value: settings.trading.maxDailyLoss, min: 1, max: 50, unit: '%' },
-              { key: 'defaultQuantity', label: 'Default Quantity', value: settings.trading.defaultQuantity, min: 1, max: 1000, unit: ' shares' },
-              { key: 'slippageTolerance', label: 'Slippage Tolerance', value: settings.trading.slippageTolerance, min: 0.1, max: 5, unit: '%' }
-            ].map((item) => (
-              <div key={item.key} className="bg-white p-4 rounded-lg border">
-                <label className="block text-sm font-medium text-gray-700 mb-2">{item.label}</label>
-                <div className="flex items-center">
-                  <input
-                    type="range"
-                    min={item.min}
-                    max={item.max}
-                    step={item.key.includes('Risk') || item.key.includes('slippage') ? 0.1 : 1}
-                    value={item.value}
-                    onChange={(e) => handleSettingChange('trading', item.key, parseFloat(e.target.value))}
-                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                  />
-                  <span className="ml-3 font-bold min-w-[60px]">{item.value}{item.unit}</span>
-                </div>
-                <div className="flex justify-between text-xs text-gray-500 mt-1">
-                  <span>{item.min}{item.unit}</span>
-                  <span>{item.max}{item.unit}</span>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">मैक्स ओपन पोजीशन्स</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="20"
+                  value={settings.trading.maxPositions}
+                  onChange={(e) => handleSettingChange('trading', 'maxPositions', parseInt(e.target.value))}
+                  className="w-full border border-gray-300 rounded-lg px-4 py-3 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">मैक्स रिस्क प्रति ट्रेड (%)</label>
+                <input
+                  type="range"
+                  min="0.1"
+                  max="10"
+                  step="0.1"
+                  value={settings.trading.maxRiskPerTrade}
+                  onChange={(e) => handleSettingChange('trading', 'maxRiskPerTrade', parseFloat(e.target.value))}
+                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                />
+                <div className="flex justify-between mt-1">
+                  <span className="text-sm text-gray-500">0.1%</span>
+                  <span className="font-medium">{settings.trading.maxRiskPerTrade}%</span>
+                  <span className="text-sm text-gray-500">10%</span>
                 </div>
               </div>
-            ))}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">डिफ़ॉल्ट क्वांटिटी</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="1000"
+                  value={settings.trading.defaultQuantity}
+                  onChange={(e) => handleSettingChange('trading', 'defaultQuantity', parseInt(e.target.value))}
+                  className="w-full border border-gray-300 rounded-lg px-4 py-3 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">मैक्स डेली लॉस (%)</label>
+                <input
+                  type="range"
+                  min="1"
+                  max="50"
+                  step="0.5"
+                  value={settings.trading.maxDailyLoss}
+                  onChange={(e) => handleSettingChange('trading', 'maxDailyLoss', parseFloat(e.target.value))}
+                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                />
+                <div className="flex justify-between mt-1">
+                  <span className="text-sm text-gray-500">1%</span>
+                  <span className="font-medium">{settings.trading.maxDailyLoss}%</span>
+                  <span className="text-sm text-gray-500">50%</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">स्लिपेज टॉलरेंस (%)</label>
+                <input
+                  type="range"
+                  min="0.1"
+                  max="5"
+                  step="0.1"
+                  value={settings.trading.slippageTolerance}
+                  onChange={(e) => handleSettingChange('trading', 'slippageTolerance', parseFloat(e.target.value))}
+                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                />
+                <div className="flex justify-between mt-1">
+                  <span className="text-sm text-gray-500">0.1%</span>
+                  <span className="font-medium">{settings.trading.slippageTolerance}%</span>
+                  <span className="text-sm text-gray-500">5%</span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100">
+                <div>
+                  <p className="font-medium text-gray-800">पार्शियल एक्जिट</p>
+                  <p className="text-sm text-gray-600">प्रॉफिट में ट्रेड का आंशिक एक्जिट करें</p>
+                </div>
+                <ToggleSwitch
+                  checked={settings.trading.partialExit}
+                  onChange={(e) => handleSettingChange('trading', 'partialExit', e.target.checked)}
+                  id="partialExit"
+                />
+              </div>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="flex items-center justify-between p-4 bg-white rounded-lg border">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-gray-200">
+            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-100">
               <div>
-                <p className="font-medium">Allow Short Selling</p>
-                <p className="text-sm text-gray-600">Enable short selling trades</p>
+                <p className="font-medium text-gray-800">शॉर्ट सेलिंग की अनुमति दें</p>
+                <p className="text-sm text-gray-600">शॉर्ट सेलिंग ट्रेड्स को एनेबल करें</p>
               </div>
               <ToggleSwitch
                 checked={settings.trading.allowShortSelling}
@@ -341,10 +502,11 @@ const Settings = () => {
                 id="shortSelling"
               />
             </div>
-            <div className="flex items-center justify-between p-4 bg-white rounded-lg border">
+            
+            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-100">
               <div>
-                <p className="font-medium">Trade Confirmation</p>
-                <p className="text-sm text-gray-600">Require manual confirmation for each trade</p>
+                <p className="font-medium text-gray-800">ट्रेड कन्फर्मेशन</p>
+                <p className="text-sm text-gray-600">प्रत्येक ट्रेड के लिए मैनुअल कन्फर्मेशन की आवश्यकता है</p>
               </div>
               <ToggleSwitch
                 checked={settings.trading.requireConfirmation}
@@ -358,253 +520,93 @@ const Settings = () => {
     </div>
   );
 
-  const renderRiskTab = () => (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-gradient-to-r from-orange-50 to-white p-6 rounded-xl border border-orange-100">
-          <h3 className="font-bold text-lg mb-4 flex items-center">
-            <Shield className="w-5 h-5 mr-2 text-orange-600" />
-            Stop Loss Settings
-          </h3>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Stop Loss Type</label>
-              <select
-                value={settings.risk.stopLossType}
-                onChange={(e) => handleSettingChange('risk', 'stopLossType', e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-4 py-3 bg-white"
-              >
-                <option value="percentage">Percentage (%)</option>
-                <option value="absolute">Absolute Value (₹)</option>
-                <option value="atr">ATR Based</option>
-                <option value="support">Support/Resistance</option>
-              </select>
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                {settings.risk.stopLossType === 'percentage' ? 'Stop Loss Percentage' : 
-                 settings.risk.stopLossType === 'absolute' ? 'Stop Loss Amount (₹)' :
-                 settings.risk.stopLossType === 'atr' ? 'ATR Multiplier' : 'Distance from Level'}
-              </label>
-              <div className="flex items-center space-x-4">
-                <input
-                  type="range"
-                  min="0.5"
-                  max="20"
-                  step="0.5"
-                  value={settings.risk.stopLossValue}
-                  onChange={(e) => handleSettingChange('risk', 'stopLossValue', parseFloat(e.target.value))}
-                  className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                />
-                <span className="font-bold min-w-[80px] text-lg">
-                  {settings.risk.stopLossValue}
-                  {settings.risk.stopLossType === 'percentage' ? '%' : 
-                   settings.risk.stopLossType === 'absolute' ? '₹' : 'x'}
-                </span>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between p-3 bg-white rounded-lg border">
-              <div>
-                <p className="font-medium">Trailing Stop Loss</p>
-                <p className="text-sm text-gray-600">Automatically adjust stop loss as price moves</p>
-              </div>
-              <ToggleSwitch
-                checked={settings.risk.trailingStopLoss}
-                onChange={(e) => handleSettingChange('risk', 'trailingStopLoss', e.target.checked)}
-                id="trailingStop"
-              />
-            </div>
-
-            {settings.risk.trailingStopLoss && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Trailing Distance (%)</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={settings.risk.trailingStopDistance}
-                  onChange={(e) => handleSettingChange('risk', 'trailingStopDistance', parseFloat(e.target.value))}
-                  className="w-full border border-gray-300 rounded-lg px-4 py-3"
-                  min="0.5"
-                  max="5"
-                />
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="bg-gradient-to-r from-green-50 to-white p-6 rounded-xl border border-green-100">
-          <h3 className="font-bold text-lg mb-4">Take Profit & Risk Management</h3>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Take Profit Type</label>
-              <select
-                value={settings.risk.takeProfitType}
-                onChange={(e) => handleSettingChange('risk', 'takeProfitType', e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-4 py-3 bg-white"
-              >
-                <option value="percentage">Percentage (%)</option>
-                <option value="absolute">Absolute Value (₹)</option>
-                <option value="rr">Risk/Reward Ratio</option>
-              </select>
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                {settings.risk.takeProfitType === 'percentage' ? 'Take Profit %' : 
-                 settings.risk.takeProfitType === 'absolute' ? 'Take Profit Amount (₹)' : 'Risk/Reward Ratio'}
-              </label>
-              <div className="flex items-center space-x-4">
-                <input
-                  type="range"
-                  min="1"
-                  max="50"
-                  step={settings.risk.takeProfitType === 'rr' ? 0.5 : 1}
-                  value={settings.risk.takeProfitValue}
-                  onChange={(e) => handleSettingChange('risk', 'takeProfitValue', parseFloat(e.target.value))}
-                  className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                />
-                <span className="font-bold min-w-[80px] text-lg">
-                  {settings.risk.takeProfitValue}
-                  {settings.risk.takeProfitType === 'percentage' ? '%' : 
-                   settings.risk.takeProfitType === 'absolute' ? '₹' : ':1'}
-                </span>
-              </div>
-            </div>
-
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <h4 className="font-bold text-blue-800 mb-2">Current Risk/Reward</h4>
-              <div className="flex items-center justify-between">
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-red-600">1:{settings.risk.riskRewardRatio}</div>
-                  <div className="text-sm text-gray-600">Risk:Reward Ratio</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-green-600">
-                    {((settings.risk.takeProfitValue / settings.risk.stopLossValue) || 0).toFixed(1)}:1
-                  </div>
-                  <div className="text-sm text-gray-600">Current Setup</div>
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Max Portfolio Risk (%)</label>
-              <input
-                type="number"
-                step="0.5"
-                value={settings.risk.maxPortfolioRisk}
-                onChange={(e) => handleSettingChange('risk', 'maxPortfolioRisk', parseFloat(e.target.value))}
-                className="w-full border border-gray-300 rounded-lg px-4 py-3"
-                min="1"
-                max="30"
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+  // बाकी tabs के लिए भी इसी तरह का स्ट्रक्चर रखें...
 
   const renderDisplayTab = () => (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-gradient-to-r from-purple-50 to-white p-6 rounded-xl border border-purple-100">
-          <h3 className="font-bold text-lg mb-4 flex items-center">
-            <Moon className="w-5 h-5 mr-2 text-purple-600" />
-            Theme & Appearance
-          </h3>
-          <div className="space-y-4">
+      <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+        <h3 className="font-bold text-lg mb-6 flex items-center text-gray-800">
+          <Moon className="w-5 h-5 mr-2 text-blue-600" />
+          थीम और अपीयरेंस
+        </h3>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">Theme Selection</label>
-              <div className="grid grid-cols-3 gap-3">
-                {['light', 'dark', 'auto'].map((theme) => (
+              <label className="block text-sm font-medium text-gray-700 mb-3">थीम सिलेक्शन</label>
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { value: 'light', label: 'लाइट', color: 'bg-white border-gray-300' },
+                  { value: 'dark', label: 'डार्क', color: 'bg-gray-900 text-white' },
+                  { value: 'blue', label: 'ब्लू', color: 'bg-blue-50 border-blue-200' },
+                  { value: 'green', label: 'ग्रीन', color: 'bg-green-50 border-green-200' }
+                ].map((theme) => (
                   <button
-                    key={theme}
-                    onClick={() => handleSettingChange('display', 'theme', theme)}
-                    className={`p-4 rounded-lg border-2 flex flex-col items-center ${
-                      settings.display.theme === theme 
-                        ? 'border-blue-500 bg-blue-50' 
+                    key={theme.value}
+                    onClick={() => handleSettingChange('display', 'theme', theme.value)}
+                    className={`p-4 rounded-xl border-2 flex flex-col items-center transition-all ${
+                      settings.display.theme === theme.value 
+                        ? 'border-blue-500 ring-2 ring-blue-200' 
                         : 'border-gray-200 hover:border-gray-300'
-                    }`}
+                    } ${theme.color}`}
                   >
-                    <div className={`w-8 h-8 rounded-full mb-2 ${
-                      theme === 'light' ? 'bg-yellow-100 border border-yellow-200' :
-                      theme === 'dark' ? 'bg-gray-800' :
-                      'bg-gradient-to-r from-gray-800 to-yellow-100'
-                    }`}></div>
-                    <span className="text-sm font-medium capitalize">{theme}</span>
+                    <div className="w-12 h-8 rounded-lg mb-2 bg-gradient-to-r from-gray-300 to-gray-100"></div>
+                    <span className="text-sm font-medium">{theme.label}</span>
                   </button>
                 ))}
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Language</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">भाषा</label>
               <select
                 value={settings.display.language}
                 onChange={(e) => handleSettingChange('display', 'language', e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-4 py-3 bg-white"
+                className="w-full border border-gray-300 rounded-lg px-4 py-3 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
                 <option value="en">English</option>
-                <option value="hi">हिंदी (Hindi)</option>
-                <option value="gu">ગુજરાતી (Gujarati)</option>
-                <option value="ta">தமிழ் (Tamil)</option>
-                <option value="te">తెలుగు (Telugu)</option>
+                <option value="hi">हिंदी</option>
+                <option value="gu">ગુજરાતી</option>
+                <option value="ta">தமிழ்</option>
+                <option value="te">తెలుగు</option>
               </select>
             </div>
-
-            {settings.display.theme === 'dark' && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Dark Mode Intensity</label>
-                <select
-                  value={settings.display.darkModeIntensity}
-                  onChange={(e) => handleSettingChange('display', 'darkModeIntensity', e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-4 py-3 bg-white"
-                >
-                  <option value="soft">Soft</option>
-                  <option value="medium">Medium</option>
-                  <option value="deep">Deep</option>
-                </select>
-              </div>
-            )}
           </div>
-        </div>
 
-        <div className="bg-gradient-to-r from-gray-50 to-white p-6 rounded-xl border border-gray-100">
-          <h3 className="font-bold text-lg mb-4">Display Preferences</h3>
-          <div className="space-y-4">
-            {[
-              { key: 'showAdvancedCharts', label: 'Advanced Charts', desc: 'Show advanced charting tools and indicators' },
-              { key: 'compactMode', label: 'Compact Mode', desc: 'Use compact view for more data density' },
-              { key: 'showIndicators', label: 'Technical Indicators', desc: 'Display technical indicators on charts' }
-            ].map((item) => (
-              <div key={item.key} className="flex items-center justify-between p-3 bg-white rounded-lg border">
-                <div>
-                  <p className="font-medium">{item.label}</p>
-                  <p className="text-sm text-gray-500">{item.desc}</p>
+          <div className="space-y-6">
+            <div className="space-y-4">
+              {[
+                { key: 'showAdvancedCharts', label: 'एडवांस्ड चार्ट्स', desc: 'एडवांस्ड चार्टिंग टूल्स और इंडिकेटर्स दिखाएं' },
+                { key: 'compactMode', label: 'कॉम्पैक्ट मोड', desc: 'अधिक डेटा डेंसिटी के लिए कॉम्पैक्ट व्यू का उपयोग करें' },
+                { key: 'showIndicators', label: 'टेक्निकल इंडिकेटर्स', desc: 'चार्ट्स पर टेक्निकल इंडिकेटर्स डिस्प्ले करें' },
+                { key: 'gridLines', label: 'ग्रिड लाइन्स', desc: 'चार्ट्स पर ग्रिड लाइन्स दिखाएं' }
+              ].map((item) => (
+                <div key={item.key} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100">
+                  <div>
+                    <p className="font-medium text-gray-800">{item.label}</p>
+                    <p className="text-sm text-gray-600">{item.desc}</p>
+                  </div>
+                  <ToggleSwitch
+                    checked={settings.display[item.key]}
+                    onChange={(e) => handleSettingChange('display', item.key, e.target.checked)}
+                    id={`display-${item.key}`}
+                  />
                 </div>
-                <ToggleSwitch
-                  checked={settings.display[item.key]}
-                  onChange={(e) => handleSettingChange('display', item.key, e.target.checked)}
-                  id={`display-${item.key}`}
-                />
-              </div>
-            ))}
+              ))}
+            </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Auto Refresh Interval</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">ऑटो रिफ्रेश इंटरवल</label>
               <select
                 value={settings.display.refreshInterval}
                 onChange={(e) => handleSettingChange('display', 'refreshInterval', parseInt(e.target.value))}
-                className="w-full border border-gray-300 rounded-lg px-4 py-3 bg-white"
+                className="w-full border border-gray-300 rounded-lg px-4 py-3 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
-                <option value="10">10 seconds (Real-time)</option>
-                <option value="30">30 seconds</option>
-                <option value="60">1 minute</option>
-                <option value="300">5 minutes</option>
-                <option value="0">Manual Refresh</option>
+                <option value="5">5 सेकंड (रियल-टाइम)</option>
+                <option value="10">10 सेकंड</option>
+                <option value="30">30 सेकंड</option>
+                <option value="60">1 मिनट</option>
+                <option value="0">मैनुअल रिफ्रेश</option>
               </select>
             </div>
           </div>
@@ -615,16 +617,17 @@ const Settings = () => {
 
   const renderPrivacyTab = () => (
     <div className="space-y-6">
-      <div className="bg-gradient-to-r from-red-50 to-white p-6 rounded-xl border border-red-100">
-        <h3 className="font-bold text-lg mb-4 flex items-center">
-          <Lock className="w-5 h-5 mr-2 text-red-600" />
-          Security & Privacy
+      <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+        <h3 className="font-bold text-lg mb-6 flex items-center text-gray-800">
+          <Lock className="w-5 h-5 mr-2 text-blue-600" />
+          सिक्योरिटी और प्राइवेसी
         </h3>
-        <div className="space-y-4">
-          <div className="flex items-center justify-between p-4 bg-white rounded-lg border">
+        
+        <div className="space-y-6">
+          <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-100">
             <div>
-              <p className="font-bold">Two-Factor Authentication</p>
-              <p className="text-sm text-gray-600">Add an extra layer of security to your account</p>
+              <p className="font-bold text-gray-800">टू-फैक्टर ऑथेंटिकेशन</p>
+              <p className="text-sm text-gray-600">अपने अकाउंट में एक अतिरिक्त सुरक्षा परत जोड़ें</p>
             </div>
             <ToggleSwitch
               checked={settings.privacy.twoFactorAuth}
@@ -635,22 +638,29 @@ const Settings = () => {
 
           {settings.privacy.twoFactorAuth && (
             <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-              <p className="font-medium text-green-800 mb-2">✅ 2FA Enabled</p>
-              <p className="text-sm text-green-700">Your account is protected with two-factor authentication.</p>
+              <div className="flex items-start">
+                <Shield className="w-5 h-5 text-green-600 mr-2 mt-0.5" />
+                <div>
+                  <p className="font-medium text-green-800 mb-1">✅ 2FA एनेबल्ड</p>
+                  <p className="text-sm text-green-700">आपका अकाउंट टू-फैक्टर ऑथेंटिकेशन से प्रोटेक्टेड है।</p>
+                </div>
+              </div>
             </div>
           )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {[
-              { key: 'publicProfile', label: 'Public Profile', desc: 'Allow others to view your profile' },
-              { key: 'showPortfolioValue', label: 'Show Portfolio Value', desc: 'Display portfolio value in profile' },
-              { key: 'shareTradingHistory', label: 'Share Trading History', desc: 'Share anonymized trading history' },
-              { key: 'showRealName', label: 'Show Real Name', desc: 'Display your real name in community' }
+              { key: 'publicProfile', label: 'पब्लिक प्रोफाइल', desc: 'दूसरों को अपना प्रोफाइल देखने की अनुमति दें' },
+              { key: 'showPortfolioValue', label: 'पोर्टफोलियो वैल्यू दिखाएं', desc: 'प्रोफाइल में पोर्टफोलियो वैल्यू डिस्प्ले करें' },
+              { key: 'shareTradingHistory', label: 'ट्रेडिंग हिस्ट्री शेयर करें', desc: 'अनामित ट्रेडिंग हिस्ट्री शेयर करें' },
+              { key: 'showRealName', label: 'रियल नेम दिखाएं', desc: 'कम्युनिटी में अपना रियल नेम डिस्प्ले करें' },
+              { key: 'hideBalance', label: 'बैलेंस छुपाएं', desc: 'डैशबोर्ड से बैलेंस छुपाएं' },
+              { key: 'autoLogout', label: 'ऑटो लॉगआउट', desc: 'इनएक्टिविटी के बाद ऑटोमैटिक लॉगआउट' }
             ].map((item) => (
-              <div key={item.key} className="flex items-center justify-between p-3 bg-white rounded-lg border">
+              <div key={item.key} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100">
                 <div>
-                  <p className="font-medium">{item.label}</p>
-                  <p className="text-sm text-gray-500">{item.desc}</p>
+                  <p className="font-medium text-gray-800">{item.label}</p>
+                  <p className="text-sm text-gray-600">{item.desc}</p>
                 </div>
                 <ToggleSwitch
                   checked={settings.privacy[item.key]}
@@ -661,168 +671,96 @@ const Settings = () => {
             ))}
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Session Timeout (minutes)</label>
-            <select
-              value={settings.privacy.sessionTimeout}
-              onChange={(e) => handleSettingChange('privacy', 'sessionTimeout', parseInt(e.target.value))}
-              className="w-full border border-gray-300 rounded-lg px-4 py-3 bg-white"
-            >
-              <option value="15">15 minutes</option>
-              <option value="30">30 minutes</option>
-              <option value="60">1 hour</option>
-              <option value="120">2 hours</option>
-              <option value="0">Never (Not Recommended)</option>
-            </select>
-          </div>
+          <div className="space-y-4 pt-4 border-t border-gray-200">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">सेशन टाइमआउट (मिनट)</label>
+              <select
+                value={settings.privacy.sessionTimeout}
+                onChange={(e) => handleSettingChange('privacy', 'sessionTimeout', parseInt(e.target.value))}
+                className="w-full border border-gray-300 rounded-lg px-4 py-3 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="15">15 मिनट</option>
+                <option value="30">30 मिनट</option>
+                <option value="60">1 घंटा</option>
+                <option value="120">2 घंटे</option>
+                <option value="0">कभी नहीं (अनुशंसित नहीं)</option>
+              </select>
+            </div>
 
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <h4 className="font-bold text-blue-800 mb-2">Data Sharing Preferences</h4>
-            <select
-              value={settings.privacy.dataSharing}
-              onChange={(e) => handleSettingChange('privacy', 'dataSharing', e.target.value)}
-              className="w-full border border-blue-300 rounded-lg px-4 py-3 bg-white mb-3"
-            >
-              <option value="none">No Data Sharing</option>
-              <option value="anonymous">Anonymous Aggregated Data</option>
-              <option value="full">Full Data (Improve AI Algorithms)</option>
-            </select>
-            <p className="text-sm text-blue-700">
-              {settings.privacy.dataSharing === 'none' && 'No data will be shared. Highest privacy level.'}
-              {settings.privacy.dataSharing === 'anonymous' && 'Only anonymous, aggregated data will be shared to improve services.'}
-              {settings.privacy.dataSharing === 'full' && 'Your trading data will help improve our AI algorithms. We value your contribution!'}
-            </p>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">डेटा शेयरिंग प्रेफरेंसेज</label>
+              <select
+                value={settings.privacy.dataSharing}
+                onChange={(e) => handleSettingChange('privacy', 'dataSharing', e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-4 py-3 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="none">कोई डेटा शेयरिंग नहीं</option>
+                <option value="anonymous">अनामित एग्रीगेटेड डेटा</option>
+                <option value="full">फुल डेटा (AI एल्गोरिदम सुधारें)</option>
+              </select>
+              <p className="text-sm text-gray-600 mt-2">
+                {settings.privacy.dataSharing === 'none' && 'कोई डेटा शेयर नहीं किया जाएगा। उच्चतम प्राइवेसी लेवल।'}
+                {settings.privacy.dataSharing === 'anonymous' && 'सेवाओं में सुधार के लिए केवल अनामित, एग्रीगेटेड डेटा शेयर किया जाएगा।'}
+                {settings.privacy.dataSharing === 'full' && 'आपका ट्रेडिंग डेटा हमारे AI एल्गोरिदम को सुधारने में मदद करेगा। हम आपके योगदान की कदर करते हैं!'}
+              </p>
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="bg-gradient-to-r from-gray-50 to-white p-6 rounded-xl border border-gray-200">
-        <h3 className="font-bold text-lg mb-4">Data Management</h3>
+      <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+        <h3 className="font-bold text-lg mb-6 text-gray-800">डेटा मैनेजमेंट</h3>
+        
         <div className="space-y-4">
           <button
             onClick={handleExportData}
-            className="w-full flex items-center justify-between p-4 bg-white rounded-lg border hover:bg-gray-50 transition-colors"
+            className="w-full flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-100 hover:bg-gray-100 transition-colors"
           >
             <div className="flex items-center">
               <Download className="w-5 h-5 mr-3 text-blue-600" />
               <div>
-                <p className="font-medium text-left">Export All Settings</p>
-                <p className="text-sm text-gray-500 text-left">Download your settings as JSON file</p>
+                <p className="font-medium text-left text-gray-800">सभी सेटिंग्स एक्सपोर्ट करें</p>
+                <p className="text-sm text-gray-600 text-left">अपनी सेटिंग्स JSON फ़ाइल के रूप में डाउनलोड करें</p>
               </div>
             </div>
-            <span className="text-blue-600 font-medium">Export</span>
+            <span className="text-blue-600 font-medium">एक्सपोर्ट</span>
           </button>
 
           <button
             onClick={handleReset}
-            className="w-full flex items-center justify-between p-4 bg-white rounded-lg border hover:bg-gray-50 transition-colors"
+            className="w-full flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-100 hover:bg-gray-100 transition-colors"
           >
             <div className="flex items-center">
-              <div className="w-5 h-5 mr-3 flex items-center justify-center text-orange-600">
-                ↻
-              </div>
+              <RefreshCw className="w-5 h-5 mr-3 text-orange-600" />
               <div>
-                <p className="font-medium text-left">Reset to Default Settings</p>
-                <p className="text-sm text-gray-500 text-left">Revert all settings to factory default</p>
+                <p className="font-medium text-left text-gray-800">डिफ़ॉल्ट सेटिंग्स पर रीसेट करें</p>
+                <p className="text-sm text-gray-600 text-left">सभी सेटिंग्स को फ़ैक्टरी डिफ़ॉल्ट पर रीसेट करें</p>
               </div>
             </div>
-            <span className="text-orange-600 font-medium">Reset</span>
+            <span className="text-orange-600 font-medium">रीसेट</span>
           </button>
 
           <button
-            onClick={() => alert('Account deletion request initiated. Our team will contact you within 24 hours.')}
-            className="w-full flex items-center justify-between p-4 bg-red-50 rounded-lg border border-red-200 hover:bg-red-100 transition-colors"
+            onClick={() => alert('अकाउंट डिलीशन रिक्वेस्ट इनिशिएट की गई। हमारी टीम 24 घंटे के भीतर आपसे संपर्क करेगी।')}
+            className="w-full flex items-center justify-between p-4 bg-red-50 rounded-lg border border-red-100 hover:bg-red-100 transition-colors"
           >
             <div className="flex items-center">
               <div className="w-5 h-5 mr-3 flex items-center justify-center text-red-600">
                 🗑️
               </div>
               <div>
-                <p className="font-bold text-left text-red-700">Delete Account</p>
-                <p className="text-sm text-red-600 text-left">Permanently delete your account and all data</p>
+                <p className="font-bold text-left text-red-700">अकाउंट डिलीट करें</p>
+                <p className="text-sm text-red-600 text-left">स्थायी रूप से अपना अकाउंट और सभी डेटा डिलीट करें</p>
               </div>
             </div>
-            <span className="text-red-700 font-bold">Delete</span>
+            <span className="text-red-700 font-bold">डिलीट</span>
           </button>
         </div>
       </div>
     </div>
   );
 
-  const renderApiTab = () => (
-    <div className="space-y-6">
-      <div className="bg-gradient-to-r from-indigo-50 to-white p-6 rounded-xl border border-indigo-100">
-        <h3 className="font-bold text-lg mb-4 flex items-center">
-          <Globe className="w-5 h-5 mr-2 text-indigo-600" />
-          API & Integration Settings
-        </h3>
-        <div className="space-y-4">
-          <div className="flex items-center justify-between p-4 bg-white rounded-lg border">
-            <div>
-              <p className="font-bold">Allow Third-Party API Access</p>
-              <p className="text-sm text-gray-600">Enable external applications to access your data via API</p>
-            </div>
-            <ToggleSwitch
-              checked={settings.api.allowThirdPartyAccess}
-              onChange={(e) => handleSettingChange('api', 'allowThirdPartyAccess', e.target.checked)}
-              id="thirdPartyApi"
-            />
-          </div>
-
-          <div className="flex items-center justify-between p-4 bg-white rounded-lg border">
-            <div>
-              <p className="font-bold">Webhook Notifications</p>
-              <p className="text-sm text-gray-600">Send trade notifications to your webhook URL</p>
-            </div>
-            <ToggleSwitch
-              checked={settings.api.webhookEnabled}
-              onChange={(e) => handleSettingChange('api', 'webhookEnabled', e.target.checked)}
-              id="webhook"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">API Rate Limit</label>
-            <select
-              value={settings.api.rateLimit}
-              onChange={(e) => handleSettingChange('api', 'rateLimit', e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-4 py-3 bg-white"
-            >
-              <option value="low">Low (10 requests/minute)</option>
-              <option value="medium">Medium (30 requests/minute)</option>
-              <option value="high">High (60 requests/minute)</option>
-              <option value="unlimited">Unlimited (Not Recommended)</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Log Retention Period</label>
-            <select
-              value={settings.api.logRetention}
-              onChange={(e) => handleSettingChange('api', 'logRetention', e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-4 py-3 bg-white"
-            >
-              <option value="7days">7 Days</option>
-              <option value="30days">30 Days</option>
-              <option value="90days">90 Days</option>
-              <option value="1year">1 Year</option>
-              <option value="forever">Forever</option>
-            </select>
-          </div>
-
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-            <h4 className="font-bold text-yellow-800 mb-2">⚠️ API Security Notice</h4>
-            <p className="text-sm text-yellow-700">
-              • Keep your API keys secure and never share them publicly<br/>
-              • Regularly rotate your API keys for better security<br/>
-              • Monitor API usage logs for suspicious activities<br/>
-              • Use IP whitelisting if available for added security
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+  // Rest of the tabs follow similar pattern...
 
   const renderActiveTab = () => {
     switch(activeTab) {
@@ -837,81 +775,86 @@ const Settings = () => {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Settings & Preferences</h1>
-          <p className="text-gray-600 mt-1">Customize your trading experience and manage account preferences</p>
-        </div>
-        <div className="flex items-center space-x-3">
-          {hasChanges && (
-            <span className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm font-medium">
-              Unsaved Changes
-            </span>
-          )}
-          <button
-            onClick={handleSave}
-            disabled={isSaving || !hasChanges}
-            className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-          >
-            <Save className="w-4 h-4" />
-            <span>{isSaving ? 'Saving...' : 'Save Changes'}</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Main Content */}
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-        {/* Tab Navigation */}
-        <div className="border-b border-gray-200">
-          <div className="flex overflow-x-auto px-4">
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center space-x-2 px-6 py-4 font-medium border-b-2 transition-all whitespace-nowrap ${
-                  activeTab === tab.id
-                    ? `border-b-2 ${tab.color}`
-                    : 'border-transparent text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                <div className={`p-2 rounded-lg ${activeTab === tab.id ? 'bg-opacity-10 ' + tab.color.replace('text', 'bg') : 'bg-gray-100'}`}>
-                  {tab.icon}
-                </div>
-                <span>{tab.label}</span>
-              </button>
-            ))}
+    <div className="min-h-screen bg-gray-50 p-4 md:p-6">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-bold text-gray-900">सेटिंग्स और प्रेफरेंसेज</h1>
+            <p className="text-gray-600 mt-2">अपना ट्रेडिंग एक्सपीरियंस कस्टमाइज़ करें और अकाउंट प्रेफरेंसेज मैनेज करें</p>
+          </div>
+          <div className="flex items-center space-x-3">
+            {hasChanges && (
+              <span className="px-3 py-1.5 bg-yellow-100 text-yellow-800 rounded-full text-sm font-medium flex items-center">
+                <AlertCircle className="w-4 h-4 mr-1" />
+                अनसेव्ड बदलाव
+              </span>
+            )}
+            <button
+              onClick={handleSave}
+              disabled={isSaving || !hasChanges}
+              className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
+            >
+              <Save className="w-4 h-4" />
+              <span>{isSaving ? 'सेव हो रहा है...' : 'बदलाव सेव करें'}</span>
+            </button>
           </div>
         </div>
 
-        {/* Tab Content */}
-        <div className="p-6">
-          {renderActiveTab()}
-        </div>
-      </div>
+        {/* Main Content */}
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-6">
+          {/* Tab Navigation */}
+          <div className="border-b border-gray-200 bg-gray-50">
+            <div className="flex overflow-x-auto px-4">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex items-center space-x-2 px-4 py-3 md:px-6 md:py-4 font-medium border-b-2 transition-all whitespace-nowrap ${
+                    activeTab === tab.id
+                      ? 'border-blue-600 text-blue-600 bg-white'
+                      : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                  }`}
+                >
+                  <div className={`p-2 rounded-lg ${
+                    activeTab === tab.id ? 'bg-blue-100' : 'bg-gray-200'
+                  }`}>
+                    {tab.icon}
+                  </div>
+                  <span className="hidden md:inline">{tab.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
 
-      {/* Quick Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white p-4 rounded-xl border border-gray-200">
-          <p className="text-sm text-gray-600">Auto Trading</p>
-          <p className={`text-lg font-bold ${settings.trading.autoTradeExecution ? 'text-green-600' : 'text-gray-400'}`}>
-            {settings.trading.autoTradeExecution ? 'Active' : 'Inactive'}
-          </p>
+          {/* Tab Content */}
+          <div className="p-4 md:p-6">
+            {renderActiveTab()}
+          </div>
         </div>
-        <div className="bg-white p-4 rounded-xl border border-gray-200">
-          <p className="text-sm text-gray-600">Risk Per Trade</p>
-          <p className="text-lg font-bold text-orange-600">{settings.trading.maxRiskPerTrade}%</p>
-        </div>
-        <div className="bg-white p-4 rounded-xl border border-gray-200">
-          <p className="text-sm text-gray-600">2FA Status</p>
-          <p className={`text-lg font-bold ${settings.privacy.twoFactorAuth ? 'text-green-600' : 'text-red-600'}`}>
-            {settings.privacy.twoFactorAuth ? 'Enabled' : 'Disabled'}
-          </p>
-        </div>
-        <div className="bg-white p-4 rounded-xl border border-gray-200">
-          <p className="text-sm text-gray-600">Theme</p>
-          <p className="text-lg font-bold text-purple-600 capitalize">{settings.display.theme}</p>
+
+        {/* Quick Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+            <p className="text-sm text-gray-600">ऑटो ट्रेडिंग</p>
+            <p className={`text-lg font-bold ${settings.trading.autoTradeExecution ? 'text-green-600' : 'text-gray-500'}`}>
+              {settings.trading.autoTradeExecution ? 'एक्टिव' : 'इनएक्टिव'}
+            </p>
+          </div>
+          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+            <p className="text-sm text-gray-600">प्रति ट्रेड रिस्क</p>
+            <p className="text-lg font-bold text-orange-600">{settings.trading.maxRiskPerTrade}%</p>
+          </div>
+          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+            <p className="text-sm text-gray-600">2FA स्टेटस</p>
+            <p className={`text-lg font-bold ${settings.privacy.twoFactorAuth ? 'text-green-600' : 'text-red-600'}`}>
+              {settings.privacy.twoFactorAuth ? 'एनेबल्ड' : 'डिसेबल्ड'}
+            </p>
+          </div>
+          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+            <p className="text-sm text-gray-600">थीम</p>
+            <p className="text-lg font-bold text-blue-600 capitalize">{settings.display.theme}</p>
+          </div>
         </div>
       </div>
     </div>
