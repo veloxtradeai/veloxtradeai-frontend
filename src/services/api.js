@@ -2,7 +2,7 @@
 // VELOXTRADEAI - REAL API SERVICE - COMPLETE
 // ============================================
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
 // Token management
 const getToken = () => localStorage.getItem('velox_auth_token');
@@ -43,7 +43,13 @@ const apiRequest = async (endpoint, method = 'GET', data = null, useAuth = true)
 
   try {
     console.log(`📡 API Call: ${method} ${API_BASE_URL}${endpoint}`);
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
+    
+    // Check if endpoint starts with /api
+    const fullUrl = endpoint.startsWith('http') 
+      ? endpoint 
+      : `${API_BASE_URL}${endpoint}`;
+    
+    const response = await fetch(fullUrl, config);
     
     // Handle 401 Unauthorized
     if (response.status === 401) {
@@ -109,6 +115,14 @@ export const authAPI = {
     return result;
   },
   
+  register: async (userData) => {
+    const result = await apiRequest('/api/auth/register', 'POST', userData, false);
+    if (result && result.success) {
+      setToken(result.token);
+    }
+    return result;
+  },
+
   logout: () => {
     removeToken();
     window.location.href = '/login';
@@ -118,7 +132,7 @@ export const authAPI = {
     const token = getToken();
     if (!token) return null;
     
-    const result = await apiRequest('/api/subscription/check');
+    const result = await apiRequest('/api/auth/me');
     if (result && result.success) {
       return result.user || { 
         email: 'user@demo.com', 
@@ -149,6 +163,11 @@ export const marketAPI = {
     return await apiRequest('/api/market/top-gainers');
   },
 
+  // Get top losers
+  getTopLosers: async () => {
+    return await apiRequest('/api/market/top-losers');
+  },
+
   // Get option chain data
   getOptionChain: async (symbol = 'NIFTY') => {
     try {
@@ -159,6 +178,20 @@ export const marketAPI = {
         success: true,
         data: [],
         message: 'Option chain endpoint not available'
+      };
+    }
+  },
+
+  // Get market status
+  getMarketStatus: async () => {
+    try {
+      const response = await apiRequest('/api/market/status');
+      return response;
+    } catch {
+      return {
+        success: true,
+        isOpen: false,
+        message: 'Market closed'
       };
     }
   }
@@ -175,26 +208,33 @@ export const tradingAPI = {
 
   // Get AI screener
   getAIScreener: async () => {
-    return await apiRequest('/api/ai/signals');
+    return await apiRequest('/api/ai/screener');
   },
 
   // Generate signal (for auto-entry)
   generateSignal: async (stockData) => {
     return await apiRequest('/api/trades/auto-entry', 'POST', stockData);
+  },
+
+  // Get trading recommendations
+  getRecommendations: async () => {
+    return await apiRequest('/api/trading/recommendations');
   }
 };
 
 // ======================
-// BROKER APIs
+// BROKER APIs - REAL WORKING
 // ======================
 export const brokerAPI = {
+  // Connect a broker
   connectBroker: async (brokerData) => {
-    return await apiRequest('/api/broker/connect', 'POST', brokerData);
+    return await apiRequest('/api/brokers/connect', 'POST', brokerData);
   },
 
+  // Get all connected brokers
   getBrokers: async () => {
     try {
-      const result = await apiRequest('/api/broker/list');
+      const result = await apiRequest('/api/brokers');
       if (result && result.success) {
         return result;
       }
@@ -204,12 +244,29 @@ export const brokerAPI = {
     }
   },
 
-  placeOrder: async (orderData) => {
-    return await apiRequest('/api/trades/auto-entry', 'POST', orderData);
+  // Get broker holdings
+  getHoldings: async (brokerId) => {
+    return await apiRequest(`/api/brokers/${brokerId}/holdings`);
   },
 
+  // Place an order
+  placeOrder: async (orderData) => {
+    return await apiRequest('/api/trades/execute', 'POST', orderData);
+  },
+
+  // Test broker connection
   testConnection: async (brokerId) => {
-    return { success: true, connected: true };
+    return await apiRequest(`/api/brokers/${brokerId}/test`);
+  },
+
+  // Disconnect broker
+  disconnectBroker: async (brokerId) => {
+    return await apiRequest(`/api/brokers/${brokerId}/disconnect`, 'POST');
+  },
+
+  // Sync broker holdings
+  syncHoldings: async (brokerId) => {
+    return await apiRequest(`/api/brokers/${brokerId}/sync`, 'POST');
   }
 };
 
@@ -217,18 +274,37 @@ export const brokerAPI = {
 // TRADE MANAGEMENT APIs
 // ======================
 export const tradeAPI = {
+  // Get all trades
   getTrades: async () => {
-    return { success: true, trades: [] };
+    try {
+      const result = await apiRequest('/api/trades');
+      return result;
+    } catch {
+      return { success: true, trades: [] };
+    }
   },
 
+  // Get active trades
+  getActiveTrades: async () => {
+    try {
+      const result = await apiRequest('/api/trades/active');
+      return result;
+    } catch {
+      return { success: true, trades: [] };
+    }
+  },
+
+  // Add a new trade
   addTrade: async (tradeData) => {
-    return await apiRequest('/api/trades/auto-entry', 'POST', tradeData);
+    return await apiRequest('/api/trades', 'POST', tradeData);
   },
 
+  // Update a trade
   updateTrade: async (tradeId, updates) => {
-    return { success: true, message: 'Trade updated' };
+    return await apiRequest(`/api/trades/${tradeId}`, 'PUT', updates);
   },
 
+  // Auto adjust SL/TP
   autoAdjust: async (tradeId, currentPrice) => {
     return await apiRequest('/api/trades/auto-adjust', 'POST', { 
       trade_id: tradeId, 
@@ -236,8 +312,9 @@ export const tradeAPI = {
     });
   },
 
+  // Close a trade
   closeTrade: async (tradeId) => {
-    return { success: true, message: 'Trade closed' };
+    return await apiRequest(`/api/trades/${tradeId}/close`, 'POST');
   }
 };
 
@@ -247,7 +324,7 @@ export const tradeAPI = {
 export const portfolioAPI = {
   getAnalytics: async () => {
     try {
-      const result = await apiRequest('/api/analytics/portfolio');
+      const result = await apiRequest('/api/portfolio/analytics');
       
       if (result && result.success) {
         return result;
@@ -286,14 +363,133 @@ export const portfolioAPI = {
   },
 
   getPerformance: async (period = 'monthly') => {
-    return {
-      success: true,
-      performance: {
-        monthlyReturn: 0,
-        quarterlyReturn: 0,
-        yearlyReturn: 0
+    try {
+      const result = await apiRequest(`/api/portfolio/performance?period=${period}`);
+      return result;
+    } catch {
+      return {
+        success: true,
+        performance: {
+          monthlyReturn: 0,
+          quarterlyReturn: 0,
+          yearlyReturn: 0
+        }
+      };
+    }
+  }
+};
+
+// ======================
+// SETTINGS APIs
+// ======================
+const defaultSettings = {
+  notifications: {
+    emailAlerts: false,
+    smsAlerts: false,
+    pushNotifications: false,
+    whatsappAlerts: false,
+    tradeExecuted: false,
+    stopLossHit: false,
+    targetAchieved: false,
+    marketCloseAlerts: false,
+    priceAlerts: false,
+    newsAlerts: false
+  },
+  trading: {
+    autoTradeExecution: false,
+    maxPositions: 0,
+    maxRiskPerTrade: 0,
+    maxDailyLoss: 0,
+    defaultQuantity: 0,
+    allowShortSelling: false,
+    slippageTolerance: 0,
+    enableHedgeMode: false,
+    requireConfirmation: false,
+    partialExit: false,
+    trailSLAfterProfit: false
+  },
+  risk: {
+    stopLossType: 'percentage',
+    stopLossValue: 0,
+    trailingStopLoss: false,
+    trailingStopDistance: 0,
+    takeProfitType: 'percentage',
+    takeProfitValue: 0,
+    riskRewardRatio: 0,
+    maxPortfolioRisk: 0,
+    volatilityAdjustment: false,
+    maxDrawdown: 0
+  },
+  display: {
+    theme: 'dark',
+    defaultView: 'dashboard',
+    refreshInterval: 0,
+    showAdvancedCharts: false,
+    compactMode: false,
+    language: 'en',
+    showIndicators: false,
+    darkModeIntensity: 'medium',
+    chartType: 'candlestick',
+    gridLines: false
+  },
+  privacy: {
+    publicProfile: false,
+    showPortfolioValue: false,
+    shareTradingHistory: false,
+    dataSharing: 'none',
+    twoFactorAuth: false,
+    sessionTimeout: 0,
+    showRealName: false,
+    hideBalance: false,
+    autoLogout: false
+  },
+  api: {
+    allowThirdPartyAccess: false,
+    webhookEnabled: false,
+    rateLimit: 'low',
+    logRetention: '30days',
+    apiKey: '',
+    webhookUrl: ''
+  },
+  subscription: {
+    plan: 'free_trial',
+    trialDaysLeft: 7,
+    autoRenew: false,
+    billingCycle: 'monthly'
+  },
+  broker: {
+    connectedBrokers: [],
+    autoSync: false,
+    syncInterval: 0
+  }
+};
+
+export const settingsAPI = {
+  getSettings: async () => {
+    try {
+      const result = await apiRequest('/api/settings');
+      if (result && result.success) {
+        return result;
       }
-    };
+      return {
+        success: true,
+        settings: defaultSettings
+      };
+    } catch (error) {
+      console.log('Settings API not available:', error);
+      return {
+        success: true,
+        settings: defaultSettings
+      };
+    }
+  },
+
+  saveSettings: async (settings) => {
+    return await apiRequest('/api/settings', 'POST', settings);
+  },
+
+  resetSettings: async () => {
+    return await apiRequest('/api/settings/reset', 'POST');
   }
 };
 
@@ -302,7 +498,37 @@ export const portfolioAPI = {
 // ======================
 export const subscriptionAPI = {
   check: async () => {
-    return await apiRequest('/api/subscription/check');
+    try {
+      const result = await apiRequest('/api/subscription/status');
+      return result;
+    } catch {
+      return {
+        success: true,
+        plan: 'free_trial',
+        trialDaysLeft: 7,
+        active: true
+      };
+    }
+  },
+
+  getPlans: async () => {
+    try {
+      const result = await apiRequest('/api/subscription/plans');
+      return result;
+    } catch {
+      return {
+        success: true,
+        plans: [
+          { id: 'free_trial', name: '7-Day Free Trial', price: 0, features: ['Basic AI signals', '1 broker connection', 'Limited alerts'] },
+          { id: 'monthly', name: 'Monthly Plan', price: 999, features: ['Full AI signals', 'Unlimited brokers', 'All alerts', 'Priority support'] },
+          { id: 'yearly', name: 'Yearly Plan', price: 9999, features: ['Full AI signals', 'Unlimited brokers', 'All alerts', 'Priority support', '1 month free'] }
+        ]
+      };
+    }
+  },
+
+  upgrade: async (planId) => {
+    return await apiRequest('/api/subscription/upgrade', 'POST', { plan: planId });
   }
 };
 
@@ -331,7 +557,21 @@ export const languageAPI = {
         marketClosed: 'Market Closed',
         refresh: 'Refresh',
         holdings: 'holdings',
-        today: 'Today'
+        today: 'Today',
+        recommendations: 'AI Recommendations',
+        stock: 'Stock',
+        price: 'Price',
+        change: 'Change',
+        signal: 'Signal',
+        confidence: 'Confidence',
+        action: 'Action',
+        buy: 'Buy',
+        sell: 'Sell',
+        entry: 'Entry',
+        exit: 'Exit',
+        stoploss: 'Stop Loss',
+        target: 'Target',
+        quantity: 'Quantity'
       },
       hi: {
         dashboard: 'डैशबोर्ड',
@@ -343,7 +583,21 @@ export const languageAPI = {
         marketClosed: 'बाज़ार बंद',
         refresh: 'रिफ्रेश',
         holdings: 'होल्डिंग्स',
-        today: 'आज'
+        today: 'आज',
+        recommendations: 'AI सिफ़ारिशें',
+        stock: 'स्टॉक',
+        price: 'प्राइस',
+        change: 'बदलाव',
+        signal: 'सिग्नल',
+        confidence: 'आत्मविश्वास',
+        action: 'एक्शन',
+        buy: 'खरीदें',
+        sell: 'बेचें',
+        entry: 'एंट्री',
+        exit: 'एग्ज़िट',
+        stoploss: 'स्टॉप लॉस',
+        target: 'टारगेट',
+        quantity: 'क्वांटिटी'
       }
     };
     
@@ -357,7 +611,7 @@ export const languageAPI = {
 export const setupWebSocket = (onMessage) => {
   try {
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${wsProtocol}//${API_BASE_URL.replace(/^https?:\/\//, '')}/ws`;
+    const wsUrl = `${wsProtocol}//${API_BASE_URL.replace(/^https?:\/\//, '').replace(/^http?:\/\//, '')}/ws`;
     const ws = new WebSocket(wsUrl);
     
     ws.onopen = () => {
@@ -406,9 +660,11 @@ export default {
   portfolio: portfolioAPI,
   subscription: subscriptionAPI,
   language: languageAPI,
+  settings: settingsAPI,
   setupWebSocket,
   safeToFixed,
   
+  // Check backend status
   checkBackendStatus: async () => {
     try {
       const response = await apiRequest('/api/health', 'GET', null, false);
@@ -416,5 +672,26 @@ export default {
     } catch {
       return false;
     }
-  }
+  },
+
+  // Format currency
+  formatCurrency: (amount) => {
+    if (amount === undefined || amount === null || amount === '') {
+      return '₹0';
+    }
+    try {
+      const num = parseFloat(amount);
+      if (isNaN(num)) return '₹0';
+      
+      return `₹${num.toLocaleString('en-IN', { 
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2 
+      })}`;
+    } catch (error) {
+      return '₹0';
+    }
+  },
+
+  // Get API base URL
+  getApiBaseUrl: () => API_BASE_URL
 };
