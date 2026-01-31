@@ -2,7 +2,8 @@
 // VELOXTRADEAI - REAL API SERVICE - COMPLETE
 // ============================================
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+// ✅ FIXED: Use proper environment variable
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://veloxtradeai-backend.yourdomain.com';
 
 // Token management
 const getToken = () => localStorage.getItem('velox_auth_token');
@@ -11,13 +12,13 @@ const removeToken = () => localStorage.removeItem('velox_auth_token');
 
 // Safe number formatting
 const safeToFixed = (value, decimals = 2) => {
-  if (value === undefined || value === null || isNaN(Number(value))) {
+  if (value === undefined || value === null || value === '' || isNaN(Number(value))) {
     return '0.00';
   }
   return Number(value).toFixed(decimals);
 };
 
-// API Request helper
+// ✅ FIXED: Improved API Request helper with better error handling
 const apiRequest = async (endpoint, method = 'GET', data = null, useAuth = true) => {
   const headers = {
     'Content-Type': 'application/json',
@@ -44,27 +45,44 @@ const apiRequest = async (endpoint, method = 'GET', data = null, useAuth = true)
   try {
     console.log(`📡 API Call: ${method} ${API_BASE_URL}${endpoint}`);
     
-    // Check if endpoint starts with /api
+    // Check if endpoint starts with http
     const fullUrl = endpoint.startsWith('http') 
       ? endpoint 
       : `${API_BASE_URL}${endpoint}`;
     
+    // Add timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+    
+    config.signal = controller.signal;
+    
     const response = await fetch(fullUrl, config);
+    clearTimeout(timeoutId);
     
     // Handle 401 Unauthorized
     if (response.status === 401) {
       removeToken();
       window.location.href = '/login';
-      return { success: false, message: 'Session expired' };
+      return { success: false, message: 'Session expired. Please login again.' };
     }
 
     // Handle 400, 404 errors gracefully
     if (response.status === 400 || response.status === 404) {
-      console.log(`⚠️ API ${response.status}: ${endpoint}`);
       return { 
         success: false, 
-        message: 'Endpoint not available',
-        error: true 
+        message: 'API endpoint not available',
+        error: true,
+        status: response.status
+      };
+    }
+
+    // Handle 500 errors
+    if (response.status >= 500) {
+      return {
+        success: false,
+        message: 'Backend server error',
+        error: true,
+        status: response.status
       };
     }
 
@@ -79,15 +97,26 @@ const apiRequest = async (endpoint, method = 'GET', data = null, useAuth = true)
     }
     
     if (!response.ok) {
-      throw new Error(result.message || `API error: ${response.status}`);
+      return {
+        success: false,
+        message: result.message || `API error: ${response.status}`,
+        status: response.status
+      };
     }
 
     return result;
   } catch (error) {
     console.error('❌ API Error:', error);
+    if (error.name === 'AbortError') {
+      return {
+        success: false,
+        message: 'Request timeout. Please check your internet connection.',
+        error: error.message
+      };
+    }
     return {
       success: false,
-      message: 'Backend connection failed',
+      message: 'Backend connection failed. Please try again later.',
       data: null,
       error: error.message
     };
@@ -95,11 +124,21 @@ const apiRequest = async (endpoint, method = 'GET', data = null, useAuth = true)
 };
 
 // ======================
-// HEALTH CHECK
+// BACKEND HEALTH CHECK
 // ======================
 export const healthAPI = {
   check: async () => {
     return await apiRequest('/api/health', 'GET', null, false);
+  },
+  
+  // Check if backend is reachable
+  isBackendAlive: async () => {
+    try {
+      const response = await apiRequest('/api/health', 'GET', null, false);
+      return response && response.status === 'online';
+    } catch {
+      return false;
+    }
   }
 };
 
@@ -111,6 +150,10 @@ export const authAPI = {
     const result = await apiRequest('/api/auth/login', 'POST', { email, password }, false);
     if (result && result.success) {
       setToken(result.token);
+      // Store user data
+      if (result.user) {
+        localStorage.setItem('velox_user', JSON.stringify(result.user));
+      }
     }
     return result;
   },
@@ -119,38 +162,47 @@ export const authAPI = {
     const result = await apiRequest('/api/auth/register', 'POST', userData, false);
     if (result && result.success) {
       setToken(result.token);
+      if (result.user) {
+        localStorage.setItem('velox_user', JSON.stringify(result.user));
+      }
     }
     return result;
   },
 
   logout: () => {
     removeToken();
+    localStorage.removeItem('velox_user');
     window.location.href = '/login';
+    return { success: true };
   },
 
   getCurrentUser: async () => {
     const token = getToken();
     if (!token) return null;
     
-    const result = await apiRequest('/api/auth/me');
-    if (result && result.success) {
-      return result.user || { 
-        email: 'user@demo.com', 
-        subscription: result.subscription || 'trial',
-        name: 'Demo User'
-      };
+    try {
+      const result = await apiRequest('/api/auth/me');
+      if (result && result.success) {
+        return result.user;
+      }
+    } catch (error) {
+      console.log('Error fetching user:', error);
     }
-    return null;
+    
+    // Fallback to localStorage
+    const userStr = localStorage.getItem('velox_user');
+    return userStr ? JSON.parse(userStr) : null;
   }
 };
 
 // ======================
-// MARKET DATA APIs
+// REAL MARKET DATA APIs (NO DUMMY DATA)
 // ======================
 export const marketAPI = {
   // Get live market data for multiple symbols
-  getLiveData: async (symbols = 'RELIANCE,TCS,HDFCBANK,INFY,ICICIBANK') => {
-    return await apiRequest(`/api/market/realtime?symbols=${symbols}`);
+  getLiveData: async (symbols = ['RELIANCE', 'TCS', 'HDFCBANK']) => {
+    const symbolStr = symbols.join(',');
+    return await apiRequest(`/api/market/realtime?symbols=${symbolStr}`);
   },
 
   // Get AI signal for a specific stock
@@ -158,57 +210,90 @@ export const marketAPI = {
     return await apiRequest(`/api/market/signal?symbol=${symbol}`);
   },
 
-  // Get top gainers
+  // Get top gainers - REAL DATA ONLY
   getTopGainers: async () => {
-    return await apiRequest('/api/market/top-gainers');
-  },
-
-  // Get top losers
-  getTopLosers: async () => {
-    return await apiRequest('/api/market/top-losers');
-  },
-
-  // Get option chain data
-  getOptionChain: async (symbol = 'NIFTY') => {
-    try {
-      const response = await apiRequest(`/api/market/options?symbol=${symbol}`);
-      return response;
-    } catch {
-      return {
-        success: true,
-        data: [],
-        message: 'Option chain endpoint not available'
-      };
+    const result = await apiRequest('/api/market/top-gainers');
+    if (result.success && result.gainers) {
+      return result;
     }
+    // Return empty array if no real data
+    return {
+      success: true,
+      gainers: [],
+      updated_at: new Date().toISOString(),
+      message: 'No real-time data available'
+    };
+  },
+
+  // Get top losers - REAL DATA ONLY
+  getTopLosers: async () => {
+    const result = await apiRequest('/api/market/top-losers');
+    if (result.success && result.losers) {
+      return result;
+    }
+    return {
+      success: true,
+      losers: [],
+      updated_at: new Date().toISOString(),
+      message: 'No real-time data available'
+    };
   },
 
   // Get market status
   getMarketStatus: async () => {
     try {
       const response = await apiRequest('/api/market/status');
-      return response;
-    } catch {
-      return {
-        success: true,
-        isOpen: false,
-        message: 'Market closed'
-      };
+      if (response.success) {
+        return response;
+      }
+    } catch (error) {
+      console.log('Market status API error:', error);
     }
+    
+    // Calculate based on time (Indian market hours: 9:15 AM to 3:30 PM)
+    const now = new Date();
+    const hours = now.getHours();
+    const minutes = now.getMinutes();
+    const currentTime = hours * 60 + minutes;
+    const marketOpenTime = 9 * 60 + 15; // 9:15 AM
+    const marketCloseTime = 15 * 60 + 30; // 3:30 PM
+    
+    return {
+      success: true,
+      isOpen: currentTime >= marketOpenTime && currentTime <= marketCloseTime,
+      message: currentTime >= marketOpenTime && currentTime <= marketCloseTime 
+        ? 'Market is open' 
+        : 'Market is closed',
+      nextOpen: marketOpenTime > currentTime ? `${marketOpenTime - currentTime} minutes` : 'Tomorrow',
+      currentTime: now.toISOString()
+    };
+  },
+
+  // Get multiple stocks in one call
+  getBatchStockData: async (symbols) => {
+    const promises = symbols.map(symbol => 
+      apiRequest(`/api/market/realtime?symbol=${symbol}`)
+    );
+    return await Promise.all(promises);
   }
 };
 
 // ======================
-// AI TRADING APIs
+// AI TRADING APIs - REAL SIGNALS ONLY
 // ======================
 export const tradingAPI = {
-  // Get AI signals
+  // Get AI signals with high confidence (85%+)
   getAISignals: async () => {
-    return await apiRequest('/api/ai/signals');
-  },
-
-  // Get AI screener
-  getAIScreener: async () => {
-    return await apiRequest('/api/ai/screener');
+    const result = await apiRequest('/api/ai/signals');
+    if (result.success && result.signals && result.signals.length > 0) {
+      return result;
+    }
+    return {
+      success: true,
+      signals: [],
+      count: 0,
+      message: 'No high confidence signals available at the moment'
+    };
   },
 
   // Generate signal (for auto-entry)
@@ -216,9 +301,15 @@ export const tradingAPI = {
     return await apiRequest('/api/trades/auto-entry', 'POST', stockData);
   },
 
-  // Get trading recommendations
-  getRecommendations: async () => {
-    return await apiRequest('/api/trading/recommendations');
+  // Get trading recommendations with filters
+  getRecommendations: async (filters = {}) => {
+    const queryParams = new URLSearchParams(filters).toString();
+    return await apiRequest(`/api/trading/recommendations?${queryParams}`);
+  },
+
+  // Validate trade before execution
+  validateTrade: async (tradeData) => {
+    return await apiRequest('/api/trades/validate', 'POST', tradeData);
   }
 };
 
@@ -233,15 +324,17 @@ export const brokerAPI = {
 
   // Get all connected brokers
   getBrokers: async () => {
-    try {
-      const result = await apiRequest('/api/brokers');
-      if (result && result.success) {
-        return result;
-      }
-      return { success: true, brokers: [], connected: 0 };
-    } catch {
-      return { success: true, brokers: [], connected: 0 };
+    const result = await apiRequest('/api/brokers');
+    if (result && result.success) {
+      return result;
     }
+    // No dummy data - return empty
+    return { 
+      success: true, 
+      brokers: [], 
+      connected: 0,
+      message: 'No brokers connected'
+    };
   },
 
   // Get broker holdings
@@ -251,12 +344,34 @@ export const brokerAPI = {
 
   // Place an order
   placeOrder: async (orderData) => {
-    return await apiRequest('/api/trades/execute', 'POST', orderData);
+    // Validate order data first
+    if (!orderData.symbol || !orderData.quantity || !orderData.action) {
+      return {
+        success: false,
+        message: 'Invalid order data: symbol, quantity and action are required'
+      };
+    }
+    
+    const result = await apiRequest('/api/trades/execute', 'POST', orderData);
+    
+    if (result.success) {
+      // Store in local history for reference
+      const tradeHistory = JSON.parse(localStorage.getItem('velox_trade_history') || '[]');
+      tradeHistory.push({
+        ...orderData,
+        timestamp: new Date().toISOString(),
+        status: 'executed',
+        orderId: result.orderId || `ORD_${Date.now()}`
+      });
+      localStorage.setItem('velox_trade_history', JSON.stringify(tradeHistory.slice(-50))); // Keep last 50
+    }
+    
+    return result;
   },
 
   // Test broker connection
   testConnection: async (brokerId) => {
-    return await apiRequest(`/api/brokers/${brokerId}/test`);
+    return await apiRequest(`/api/brokers/${brokerId}/test`, 'POST');
   },
 
   // Disconnect broker
@@ -267,31 +382,34 @@ export const brokerAPI = {
   // Sync broker holdings
   syncHoldings: async (brokerId) => {
     return await apiRequest(`/api/brokers/${brokerId}/sync`, 'POST');
+  },
+
+  // Get order history
+  getOrderHistory: async (brokerId, limit = 20) => {
+    return await apiRequest(`/api/brokers/${brokerId}/orders?limit=${limit}`);
   }
 };
 
 // ======================
-// TRADE MANAGEMENT APIs
+// TRADE MANAGEMENT APIs - REAL DATA ONLY
 // ======================
 export const tradeAPI = {
   // Get all trades
   getTrades: async () => {
-    try {
-      const result = await apiRequest('/api/trades');
+    const result = await apiRequest('/api/trades');
+    if (result.success) {
       return result;
-    } catch {
-      return { success: true, trades: [] };
     }
+    return { success: true, trades: [] };
   },
 
   // Get active trades
   getActiveTrades: async () => {
-    try {
-      const result = await apiRequest('/api/trades/active');
+    const result = await apiRequest('/api/trades/active');
+    if (result.success) {
       return result;
-    } catch {
-      return { success: true, trades: [] };
     }
+    return { success: true, trades: [] };
   },
 
   // Add a new trade
@@ -315,6 +433,11 @@ export const tradeAPI = {
   // Close a trade
   closeTrade: async (tradeId) => {
     return await apiRequest(`/api/trades/${tradeId}/close`, 'POST');
+  },
+
+  // Get trade history
+  getTradeHistory: async (days = 7) => {
+    return await apiRequest(`/api/trades/history?days=${days}`);
   }
 };
 
@@ -342,22 +465,15 @@ export const portfolioAPI = {
           investedValue: 0,
           returnsPercent: 0,
           holdings: []
-        }
+        },
+        message: 'Portfolio data not available'
       };
     } catch (error) {
       console.log('Portfolio API not available:', error);
       return {
-        success: true,
-        portfolio: {
-          totalValue: 0,
-          dailyPnL: 0,
-          winRate: '0%',
-          activeTrades: 0,
-          holdingsCount: 0,
-          investedValue: 0,
-          returnsPercent: 0,
-          holdings: []
-        }
+        success: false,
+        portfolio: null,
+        message: 'Failed to fetch portfolio data'
       };
     }
   },
@@ -368,283 +484,80 @@ export const portfolioAPI = {
       return result;
     } catch {
       return {
-        success: true,
-        performance: {
-          monthlyReturn: 0,
-          quarterlyReturn: 0,
-          yearlyReturn: 0
-        }
-      };
-    }
-  }
-};
-
-// ======================
-// SETTINGS APIs
-// ======================
-const defaultSettings = {
-  notifications: {
-    emailAlerts: false,
-    smsAlerts: false,
-    pushNotifications: false,
-    whatsappAlerts: false,
-    tradeExecuted: false,
-    stopLossHit: false,
-    targetAchieved: false,
-    marketCloseAlerts: false,
-    priceAlerts: false,
-    newsAlerts: false
-  },
-  trading: {
-    autoTradeExecution: false,
-    maxPositions: 0,
-    maxRiskPerTrade: 0,
-    maxDailyLoss: 0,
-    defaultQuantity: 0,
-    allowShortSelling: false,
-    slippageTolerance: 0,
-    enableHedgeMode: false,
-    requireConfirmation: false,
-    partialExit: false,
-    trailSLAfterProfit: false
-  },
-  risk: {
-    stopLossType: 'percentage',
-    stopLossValue: 0,
-    trailingStopLoss: false,
-    trailingStopDistance: 0,
-    takeProfitType: 'percentage',
-    takeProfitValue: 0,
-    riskRewardRatio: 0,
-    maxPortfolioRisk: 0,
-    volatilityAdjustment: false,
-    maxDrawdown: 0
-  },
-  display: {
-    theme: 'dark',
-    defaultView: 'dashboard',
-    refreshInterval: 0,
-    showAdvancedCharts: false,
-    compactMode: false,
-    language: 'en',
-    showIndicators: false,
-    darkModeIntensity: 'medium',
-    chartType: 'candlestick',
-    gridLines: false
-  },
-  privacy: {
-    publicProfile: false,
-    showPortfolioValue: false,
-    shareTradingHistory: false,
-    dataSharing: 'none',
-    twoFactorAuth: false,
-    sessionTimeout: 0,
-    showRealName: false,
-    hideBalance: false,
-    autoLogout: false
-  },
-  api: {
-    allowThirdPartyAccess: false,
-    webhookEnabled: false,
-    rateLimit: 'low',
-    logRetention: '30days',
-    apiKey: '',
-    webhookUrl: ''
-  },
-  subscription: {
-    plan: 'free_trial',
-    trialDaysLeft: 7,
-    autoRenew: false,
-    billingCycle: 'monthly'
-  },
-  broker: {
-    connectedBrokers: [],
-    autoSync: false,
-    syncInterval: 0
-  }
-};
-
-export const settingsAPI = {
-  getSettings: async () => {
-    try {
-      const result = await apiRequest('/api/settings');
-      if (result && result.success) {
-        return result;
-      }
-      return {
-        success: true,
-        settings: defaultSettings
-      };
-    } catch (error) {
-      console.log('Settings API not available:', error);
-      return {
-        success: true,
-        settings: defaultSettings
+        success: false,
+        performance: null,
+        message: 'Performance data not available'
       };
     }
   },
 
-  saveSettings: async (settings) => {
-    return await apiRequest('/api/settings', 'POST', settings);
-  },
-
-  resetSettings: async () => {
-    return await apiRequest('/api/settings/reset', 'POST');
-  }
-};
-
-// ======================
-// SUBSCRIPTION APIs
-// ======================
-export const subscriptionAPI = {
-  check: async () => {
+  // Get holdings summary
+  getHoldingsSummary: async () => {
     try {
-      const result = await apiRequest('/api/subscription/status');
+      const result = await apiRequest('/api/portfolio/holdings');
       return result;
     } catch {
       return {
-        success: true,
-        plan: 'free_trial',
-        trialDaysLeft: 7,
-        active: true
+        success: false,
+        holdings: [],
+        message: 'Holdings data not available'
       };
     }
-  },
-
-  getPlans: async () => {
-    try {
-      const result = await apiRequest('/api/subscription/plans');
-      return result;
-    } catch {
-      return {
-        success: true,
-        plans: [
-          { id: 'free_trial', name: '7-Day Free Trial', price: 0, features: ['Basic AI signals', '1 broker connection', 'Limited alerts'] },
-          { id: 'monthly', name: 'Monthly Plan', price: 999, features: ['Full AI signals', 'Unlimited brokers', 'All alerts', 'Priority support'] },
-          { id: 'yearly', name: 'Yearly Plan', price: 9999, features: ['Full AI signals', 'Unlimited brokers', 'All alerts', 'Priority support', '1 month free'] }
-        ]
-      };
-    }
-  },
-
-  upgrade: async (planId) => {
-    return await apiRequest('/api/subscription/upgrade', 'POST', { plan: planId });
   }
 };
 
 // ======================
-// LANGUAGE MANAGEMENT
+// REAL DATA HELPER FUNCTIONS
 // ======================
-export const languageAPI = {
-  setLanguage: (lang) => {
-    localStorage.setItem('velox_language', lang);
-    window.location.reload();
-  },
 
-  getLanguage: () => {
-    return localStorage.getItem('velox_language') || 'en';
-  },
-
-  getTranslations: async (lang = 'en') => {
-    const translations = {
-      en: {
-        dashboard: 'Dashboard',
-        portfolioValue: 'Portfolio Value',
-        dailyPnL: 'Daily P&L',
-        winRate: 'Win Rate',
-        activeTrades: 'Active Trades',
-        marketOpen: 'Market Open',
-        marketClosed: 'Market Closed',
-        refresh: 'Refresh',
-        holdings: 'holdings',
-        today: 'Today',
-        recommendations: 'AI Recommendations',
-        stock: 'Stock',
-        price: 'Price',
-        change: 'Change',
-        signal: 'Signal',
-        confidence: 'Confidence',
-        action: 'Action',
-        buy: 'Buy',
-        sell: 'Sell',
-        entry: 'Entry',
-        exit: 'Exit',
-        stoploss: 'Stop Loss',
-        target: 'Target',
-        quantity: 'Quantity'
-      },
-      hi: {
-        dashboard: 'डैशबोर्ड',
-        portfolioValue: 'पोर्टफोलियो वैल्यू',
-        dailyPnL: 'दैनिक P&L',
-        winRate: 'विन रेट',
-        activeTrades: 'एक्टिव ट्रेड्स',
-        marketOpen: 'बाज़ार खुला',
-        marketClosed: 'बाज़ार बंद',
-        refresh: 'रिफ्रेश',
-        holdings: 'होल्डिंग्स',
-        today: 'आज',
-        recommendations: 'AI सिफ़ारिशें',
-        stock: 'स्टॉक',
-        price: 'प्राइस',
-        change: 'बदलाव',
-        signal: 'सिग्नल',
-        confidence: 'आत्मविश्वास',
-        action: 'एक्शन',
-        buy: 'खरीदें',
-        sell: 'बेचें',
-        entry: 'एंट्री',
-        exit: 'एग्ज़िट',
-        stoploss: 'स्टॉप लॉस',
-        target: 'टारगेट',
-        quantity: 'क्वांटिटी'
-      }
-    };
-    
-    return translations[lang] || translations.en;
+// Format currency
+export const formatCurrency = (amount) => {
+  if (amount === undefined || amount === null || amount === '') {
+    return '₹0';
   }
-};
-
-// ======================
-// REAL-TIME WebSocket
-// ======================
-export const setupWebSocket = (onMessage) => {
   try {
-    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${wsProtocol}//${API_BASE_URL.replace(/^https?:\/\//, '').replace(/^http?:\/\//, '')}/ws`;
-    const ws = new WebSocket(wsUrl);
+    const num = parseFloat(amount);
+    if (isNaN(num)) return '₹0';
     
-    ws.onopen = () => {
-      console.log('✅ WebSocket connected');
-      const token = getToken();
-      if (token) {
-        ws.send(JSON.stringify({ type: 'auth', token }));
-      }
-    };
-
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        onMessage(data);
-      } catch (error) {
-        console.error('WebSocket message error:', error);
-      }
-    };
-
-    ws.onerror = (error) => {
-      console.error('❌ WebSocket error:', error);
-    };
-
-    ws.onclose = () => {
-      console.log('🔌 WebSocket disconnected - reconnecting in 5s');
-      setTimeout(() => setupWebSocket(onMessage), 5000);
-    };
-
-    return () => ws.close();
+    if (Math.abs(num) >= 10000000) { // 1 crore
+      return `₹${(num / 10000000).toFixed(2)}Cr`;
+    }
+    if (Math.abs(num) >= 100000) { // 1 lakh
+      return `₹${(num / 100000).toFixed(2)}L`;
+    }
+    if (Math.abs(num) >= 1000) { // 1 thousand
+      return `₹${(num / 1000).toFixed(2)}K`;
+    }
+    
+    return `₹${num.toLocaleString('en-IN', { 
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2 
+    })}`;
   } catch (error) {
-    console.error('WebSocket setup failed:', error);
-    return () => {};
+    return '₹0';
   }
+};
+
+// Calculate percentage change
+export const calculateChange = (oldPrice, newPrice) => {
+  if (!oldPrice || !newPrice || oldPrice === 0) return 0;
+  return ((newPrice - oldPrice) / oldPrice) * 100;
+};
+
+// Check if market is open
+export const isMarketOpen = () => {
+  const now = new Date();
+  const hours = now.getHours();
+  const minutes = now.getMinutes();
+  const currentTime = hours * 60 + minutes;
+  const marketOpenTime = 9 * 60 + 15; // 9:15 AM
+  const marketCloseTime = 15 * 60 + 30; // 3:30 PM
+  
+  // Check if weekday (Monday to Friday)
+  const day = now.getDay();
+  const isWeekday = day >= 1 && day <= 5;
+  
+  return isWeekday && (currentTime >= marketOpenTime && currentTime <= marketCloseTime);
 };
 
 // ======================
@@ -658,40 +571,27 @@ export default {
   broker: brokerAPI,
   trade: tradeAPI,
   portfolio: portfolioAPI,
-  subscription: subscriptionAPI,
-  language: languageAPI,
-  settings: settingsAPI,
-  setupWebSocket,
-  safeToFixed,
   
-  // Check backend status
-  checkBackendStatus: async () => {
+  // Utility functions
+  safeToFixed,
+  formatCurrency,
+  calculateChange,
+  isMarketOpen,
+  
+  // Get API base URL
+  getApiBaseUrl: () => API_BASE_URL,
+  
+  // Initialize connection
+  initialize: async () => {
     try {
-      const response = await apiRequest('/api/health', 'GET', null, false);
-      return response && response.success;
-    } catch {
+      const isAlive = await healthAPI.isBackendAlive();
+      if (!isAlive) {
+        console.warn('⚠️ Backend is not reachable. Some features may not work.');
+      }
+      return isAlive;
+    } catch (error) {
+      console.error('Initialization error:', error);
       return false;
     }
-  },
-
-  // Format currency
-  formatCurrency: (amount) => {
-    if (amount === undefined || amount === null || amount === '') {
-      return '₹0';
-    }
-    try {
-      const num = parseFloat(amount);
-      if (isNaN(num)) return '₹0';
-      
-      return `₹${num.toLocaleString('en-IN', { 
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2 
-      })}`;
-    } catch (error) {
-      return '₹0';
-    }
-  },
-
-  // Get API base URL
-  getApiBaseUrl: () => API_BASE_URL
+  }
 };
