@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { TrendingUp, TrendingDown, Info, Target, Clock, Zap, AlertCircle } from 'lucide-react';
+import { TrendingUp, TrendingDown, Info, Target, Clock, Zap, AlertCircle, ExternalLink, Shield } from 'lucide-react';
 import EntryPopup from './EntryPopup';
 import ExitPopup from './ExitPopup';
 
@@ -8,24 +8,23 @@ const StockCard = ({ stock, onTrade, connectionStatus, isHindi }) => {
   const [showExitPopup, setShowExitPopup] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
-  // SAFE: Get signal with fallback
+  // Helper functions
   const getSignalColor = (signal) => {
     if (!signal) return 'bg-gray-500';
     
     const signalStr = String(signal).toLowerCase();
     switch(signalStr) {
-      case 'strong_buy': return 'bg-emerald-600';
-      case 'buy': return 'bg-emerald-500';
-      case 'neutral': return 'bg-yellow-500';
-      case 'sell': return 'bg-red-500';
-      case 'strong_sell': return 'bg-red-600';
-      default: return 'bg-gray-500';
+      case 'strong_buy': return 'bg-gradient-to-r from-emerald-600 to-emerald-500';
+      case 'buy': return 'bg-gradient-to-r from-emerald-500 to-emerald-400';
+      case 'neutral': return 'bg-gradient-to-r from-amber-500 to-amber-400';
+      case 'sell': return 'bg-gradient-to-r from-red-500 to-red-400';
+      case 'strong_sell': return 'bg-gradient-to-r from-red-600 to-red-500';
+      default: return 'bg-gradient-to-r from-gray-500 to-gray-400';
     }
   };
 
-  // SAFE: Format price with fallback
   const formatPrice = (price) => {
-    if (price === undefined || price === null || price === '' || isNaN(Number(price))) {
+    if (price === undefined || price === null || isNaN(Number(price))) {
       return '₹0.00';
     }
     const num = parseFloat(price);
@@ -35,17 +34,16 @@ const StockCard = ({ stock, onTrade, connectionStatus, isHindi }) => {
     })}`;
   };
 
-  // SAFE: Get risk badge
   const getRiskBadge = (risk) => {
     if (!risk) {
-      return <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">N/A</span>;
+      return <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-500/20 text-gray-300">N/A</span>;
     }
     
     const riskStr = String(risk).toLowerCase();
     const config = {
-      low: { color: 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30', label: 'Low' },
-      medium: { color: 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30', label: 'Medium' },
-      high: { color: 'bg-red-500/20 text-red-400 border border-red-500/30', label: 'High' }
+      low: { color: 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30', label: isHindi ? 'कम' : 'Low' },
+      medium: { color: 'bg-amber-500/20 text-amber-400 border border-amber-500/30', label: isHindi ? 'मध्यम' : 'Medium' },
+      high: { color: 'bg-red-500/20 text-red-400 border border-red-500/30', label: isHindi ? 'उच्च' : 'High' }
     };
     const cfg = config[riskStr] || config.medium;
     return (
@@ -55,75 +53,62 @@ const StockCard = ({ stock, onTrade, connectionStatus, isHindi }) => {
     );
   };
 
-  // SAFE: Get change percent
-  const getChangePercent = () => {
-    if (stock.changePercent !== undefined) {
-      return stock.changePercent;
-    }
-    if (stock.change !== undefined) {
-      return stock.change;
-    }
-    if (stock.market_data?.change !== undefined) {
-      return stock.market_data.change;
-    }
-    return 0;
-  };
-
-  // SAFE: Get current price
+  // Get data with fallbacks
   const getCurrentPrice = () => {
-    if (stock.currentPrice !== undefined) {
-      return stock.currentPrice;
-    }
-    if (stock.market_data?.last_price !== undefined) {
-      return stock.market_data.last_price;
-    }
+    if (stock.currentPrice !== undefined) return stock.currentPrice;
+    if (stock.last_price !== undefined) return stock.last_price;
+    if (stock.market_data?.last_price !== undefined) return stock.market_data.last_price;
     return 0;
   };
 
-  // SAFE: Get signal text
+  const getChangePercent = () => {
+    if (stock.changePercent !== undefined) return stock.changePercent;
+    if (stock.change_percent !== undefined) return stock.change_percent;
+    if (stock.market_data?.change_percent !== undefined) return stock.market_data.change_percent;
+    return 0;
+  };
+
   const getSignalText = () => {
     if (!stock.signal) return 'NEUTRAL';
-    
     const signalStr = String(stock.signal);
     return signalStr.replace('_', ' ').toUpperCase();
   };
 
-  // SAFE: Get confidence
   const getConfidence = () => {
     if (stock.confidence) return stock.confidence;
     if (stock.ai_signal?.confidence) return stock.ai_signal.confidence;
     return '0%';
   };
 
-  // SAFE: Get entry price from AI signal
   const getEntryPrice = () => {
     if (stock.entryPrice) return stock.entryPrice;
     if (stock.ai_signal?.entry_price) return stock.ai_signal.entry_price;
-    return getCurrentPrice() * 0.99; // Default 1% below current
+    if (stock.entry_price) return stock.entry_price;
+    return getCurrentPrice() * 0.99;
   };
 
-  // SAFE: Get target price
   const getTargetPrice = () => {
     if (stock.targetPrice) return stock.targetPrice;
     if (stock.ai_signal?.target_price) return stock.ai_signal.target_price;
-    return getCurrentPrice() * 1.05; // Default 5% above
+    if (stock.target_price) return stock.target_price;
+    return getCurrentPrice() * 1.05;
   };
 
-  // SAFE: Get stop loss
   const getStopLoss = () => {
     if (stock.stopLoss) return stock.stopLoss;
     if (stock.ai_signal?.stop_loss) return stock.ai_signal.stop_loss;
-    return getCurrentPrice() * 0.97; // Default 3% below
+    if (stock.stop_loss) return stock.stop_loss;
+    return getCurrentPrice() * 0.97;
   };
 
-  const changePercent = getChangePercent();
   const currentPrice = getCurrentPrice();
+  const changePercent = getChangePercent();
   const isPositive = changePercent >= 0;
   const confidence = getConfidence();
 
   return (
     <>
-      <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/30 rounded-2xl border border-emerald-900/40 hover:border-emerald-500/60 transition-all duration-300 shadow-xl">
+      <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/30 rounded-2xl border border-emerald-900/40 hover:border-emerald-500/60 transition-all duration-300">
         <div className="p-5">
           {/* HEADER */}
           <div className="flex items-start justify-between mb-4">
@@ -135,7 +120,7 @@ const StockCard = ({ stock, onTrade, connectionStatus, isHindi }) => {
                 </span>
               </div>
               <p className="text-sm text-emerald-300/70">
-                {stock.name || stock.symbol || 'Unknown Company'}
+                {stock.name || stock.companyName || stock.symbol || (isHindi ? 'अज्ञात कंपनी' : 'Unknown Company')}
               </p>
             </div>
             
@@ -144,7 +129,7 @@ const StockCard = ({ stock, onTrade, connectionStatus, isHindi }) => {
               <div className={`flex items-center justify-end space-x-1 ${isPositive ? 'text-emerald-400' : 'text-red-400'}`}>
                 {isPositive ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
                 <span className="font-medium">
-                  {isPositive ? '+' : ''}{Number(changePercent).toFixed(2)}%
+                  {isPositive ? '+' : ''}{parseFloat(changePercent).toFixed(2)}%
                 </span>
               </div>
             </div>
@@ -154,7 +139,9 @@ const StockCard = ({ stock, onTrade, connectionStatus, isHindi }) => {
           <div className="mb-4">
             <div className="inline-flex items-center space-x-2 px-3 py-1.5 rounded-full bg-gradient-to-r from-emerald-600/20 to-cyan-600/20 border border-emerald-500/30">
               <Zap className="w-3 h-3 text-emerald-400" />
-              <span className="text-xs font-medium text-emerald-300">AI Confidence: {confidence}</span>
+              <span className="text-xs font-medium text-emerald-300">
+                {isHindi ? 'AI आत्मविश्वास:' : 'AI Confidence:'} {confidence}
+              </span>
             </div>
           </div>
 
@@ -193,7 +180,7 @@ const StockCard = ({ stock, onTrade, connectionStatus, isHindi }) => {
             </div>
           </div>
 
-          {/* ADDITIONAL INFO */}
+          {/* VOLUME & SOURCE */}
           <div className="mb-4">
             <div className="grid grid-cols-2 gap-3 text-xs">
               <div className="bg-slate-800/30 rounded-lg p-2">
@@ -204,7 +191,7 @@ const StockCard = ({ stock, onTrade, connectionStatus, isHindi }) => {
               </div>
               <div className="bg-slate-800/30 rounded-lg p-2">
                 <p className="text-emerald-300/60 mb-1">{isHindi ? 'स्रोत' : 'Source'}</p>
-                <p className="text-white font-medium">{stock.source || 'Yahoo Finance'}</p>
+                <p className="text-white font-medium">{stock.source || 'Real-time API'}</p>
               </div>
             </div>
           </div>
@@ -275,7 +262,7 @@ const StockCard = ({ stock, onTrade, connectionStatus, isHindi }) => {
               onTrade('BUY', {
                 ...data,
                 symbol: stock.symbol,
-                name: stock.name || stock.symbol
+                name: stock.name || stock.companyName || stock.symbol
               });
             }
             setShowEntryPopup(false);
@@ -294,7 +281,7 @@ const StockCard = ({ stock, onTrade, connectionStatus, isHindi }) => {
               onTrade('SELL', {
                 ...data,
                 symbol: stock.symbol,
-                name: stock.name || stock.symbol
+                name: stock.name || stock.companyName || stock.symbol
               });
             }
             setShowExitPopup(false);
