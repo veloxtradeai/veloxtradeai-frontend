@@ -1,44 +1,37 @@
 import React, { useState, useEffect } from 'react';
-import { X, AlertTriangle, TrendingUp, TrendingDown, Target, DollarSign, Clock, BarChart3, Percent, Zap } from 'lucide-react';
-import brokerIntegration from '../services/brokerIntegration';
+import { X, AlertTriangle, TrendingUp, TrendingDown, Target, DollarSign, Clock, BarChart3, Percent, Check, Shield } from 'lucide-react';
+import { brokerAPI } from '../services/api';
 
-const ExitPopup = ({ stock, onClose, onSubmit }) => {
+const ExitPopup = ({ stock, onClose, onSubmit, isHindi }) => {
   const [formData, setFormData] = useState({
     exitPrice: stock.currentPrice || 0,
-    exitReason: '',
-    exitType: 'target_hit',
+    exitReason: 'manual_exit',
     exitQuantity: stock.quantity || 1,
     partialExit: false,
-    trailingExit: false,
     notes: ''
   });
 
   const [realTimePrice, setRealTimePrice] = useState(stock.currentPrice || 0);
-  const [priceTrend, setPriceTrend] = useState('stable');
-  const [exitSuggestions, setExitSuggestions] = useState([]);
   const [orderStatus, setOrderStatus] = useState('ready');
+  const [exitSuggestions, setExitSuggestions] = useState([]);
 
   // Real-time price simulation
   useEffect(() => {
+    if (!stock.currentPrice) return;
+    
     const interval = setInterval(() => {
-      if (stock.currentPrice) {
-        const randomChange = (Math.random() - 0.5) * 0.15; // ±0.15% change
-        const newPrice = stock.currentPrice * (1 + randomChange);
-        setRealTimePrice(parseFloat(newPrice.toFixed(2)));
-        
-        // Determine trend
-        if (newPrice > stock.currentPrice * 1.02) {
-          setPriceTrend('bullish');
-        } else if (newPrice < stock.currentPrice * 0.98) {
-          setPriceTrend('bearish');
-        } else {
-          setPriceTrend('stable');
-        }
+      const randomChange = (Math.random() - 0.5) * 0.08;
+      const newPrice = stock.currentPrice * (1 + randomChange);
+      setRealTimePrice(parseFloat(newPrice.toFixed(2)));
+      
+      // Auto-update exit price
+      if (formData.exitPrice === stock.currentPrice) {
+        setFormData(prev => ({ ...prev, exitPrice: parseFloat(newPrice.toFixed(2)) }));
       }
-    }, 1500);
+    }, 2000);
 
     return () => clearInterval(interval);
-  }, [stock.currentPrice]);
+  }, [stock.currentPrice, formData.exitPrice]);
 
   // Auto-suggest exit strategies
   useEffect(() => {
@@ -46,15 +39,12 @@ const ExitPopup = ({ stock, onClose, onSubmit }) => {
 
     const suggestions = [];
     const currentProfitPercent = ((realTimePrice - stock.entryPrice) / stock.entryPrice * 100);
-    const holdingHours = stock.holdingPeriod ? parseInt(stock.holdingPeriod) : 1;
 
-    // Suggest based on profit percentage
     if (currentProfitPercent >= 5) {
       suggestions.push({
         type: 'take_profit',
-        title: 'Take Profit (5%+)',
-        description: 'Good profit achieved. Consider booking partial profit.',
-        exitType: 'partial_exit',
+        title: isHindi ? 'प्रॉफिट लें (5%+)' : 'Take Profit (5%+)',
+        description: isHindi ? 'अच्छा प्रॉफिट हुआ। आंशिक प्रॉफिट बुक करें।' : 'Good profit achieved. Consider booking partial profit.',
         exitPercent: 50,
         reason: 'achieved_target'
       });
@@ -63,40 +53,25 @@ const ExitPopup = ({ stock, onClose, onSubmit }) => {
     if (currentProfitPercent <= -2) {
       suggestions.push({
         type: 'cut_loss',
-        title: 'Cut Loss (-2%)',
-        description: 'Stop loss triggered. Exit to minimize further loss.',
-        exitType: 'full_exit',
+        title: isHindi ? 'लॉस काटें (-2%)' : 'Cut Loss (-2%)',
+        description: isHindi ? 'स्टॉप लॉस ट्रिगर हुआ। आगे के नुकसान को कम करने के लिए एक्ज़िट करें।' : 'Stop loss triggered. Exit to minimize further loss.',
         exitPercent: 100,
         reason: 'stop_loss_hit'
       });
     }
 
-    // Time-based suggestions
-    if (holdingHours >= 3 && currentProfitPercent > 0) {
-      suggestions.push({
-        type: 'time_based',
-        title: 'Time Exit',
-        description: 'Held for sufficient time. Consider exiting.',
-        exitType: 'full_exit',
-        exitPercent: 100,
-        reason: 'time_based'
-      });
-    }
-
-    // Volatility suggestion
     if (Math.abs(currentProfitPercent) > 8) {
       suggestions.push({
         type: 'volatility',
-        title: 'High Volatility',
-        description: 'High price movement detected. Secure profits.',
-        exitType: 'partial_exit',
+        title: isHindi ? 'हाई वोलैटिलिटी' : 'High Volatility',
+        description: isHindi ? 'हाई प्राइस मूवमेंट डिटेक्ट हुई। प्रॉफिट सिक्योर करें।' : 'High price movement detected. Secure profits.',
         exitPercent: 75,
         reason: 'market_volatility'
       });
     }
 
     setExitSuggestions(suggestions);
-  }, [realTimePrice, stock.entryPrice, stock.holdingPeriod]);
+  }, [realTimePrice, stock.entryPrice, isHindi]);
 
   const handleAutoExit = async (suggestion) => {
     setOrderStatus('placing');
@@ -105,25 +80,27 @@ const ExitPopup = ({ stock, onClose, onSubmit }) => {
       ...formData,
       exitPrice: realTimePrice,
       exitReason: suggestion.reason,
-      exitType: suggestion.type,
-      exitQuantity: Math.floor((suggestion.exitPercent / 100) * (stock.quantity || 1)),
-      exitStrategy: 'auto_suggested'
+      exitQuantity: Math.floor((suggestion.exitPercent / 100) * (stock.quantity || 1))
     };
 
     try {
-      // Place sell order through broker
-      const orderResult = await brokerIntegration.placeOrder(stock.broker || 'zerodha', {
+      const orderData = {
+        brokerId: stock.brokerId || 'default',
         symbol: stock.symbol,
-        exchange: stock.exchange || 'NSE',
-        transactionType: 'SELL',
+        action: 'SELL',
         orderType: 'MARKET',
         quantity: exitData.exitQuantity,
         price: realTimePrice,
-        productType: 'INTRADAY'
-      });
+        notes: `Auto exit: ${suggestion.title}`
+      };
 
-      if (orderResult.success) {
-        handleSubmit(exitData, orderResult.orderId);
+      const result = await brokerAPI.placeOrder(orderData);
+      
+      if (result?.success) {
+        handleSubmit(exitData, result.orderId);
+      } else {
+        setOrderStatus('failed');
+        alert(isHindi ? `एग्ज़िट फेल: ${result?.message}` : `Exit failed: ${result?.message}`);
       }
     } catch (error) {
       console.error('Exit order failed:', error);
@@ -131,8 +108,9 @@ const ExitPopup = ({ stock, onClose, onSubmit }) => {
     }
   };
 
-  const handleSubmit = (customData = null, orderId = null) => {
+  const handleSubmit = async (customData = null, orderId = null) => {
     const data = customData || formData;
+    setOrderStatus('placing');
     
     const profitLoss = data.exitPrice - stock.entryPrice;
     const profitLossPercent = ((profitLoss / stock.entryPrice) * 100).toFixed(2);
@@ -146,126 +124,144 @@ const ExitPopup = ({ stock, onClose, onSubmit }) => {
       profitLossPercent,
       totalPnL,
       orderId: orderId || `EXIT_${Date.now()}`,
-      holdingPeriod: stock.holdingPeriod || calculateHoldingPeriod(),
-      entryPrice: stock.entryPrice,
-      maxPrice: stock.maxPrice || realTimePrice,
-      minPrice: stock.minPrice || realTimePrice
+      entryPrice: stock.entryPrice
     };
 
-    onSubmit(exitData);
-    setOrderStatus('success');
-    
-    setTimeout(() => {
-      onClose();
-    }, 1500);
-  };
+    try {
+      // Call backend to execute exit
+      const result = await brokerAPI.placeOrder({
+        brokerId: stock.brokerId || 'default',
+        symbol: stock.symbol,
+        action: 'SELL',
+        orderType: 'MARKET',
+        quantity: data.exitQuantity,
+        price: data.exitPrice,
+        notes: `Exit: ${data.exitReason}`
+      });
 
-  const calculateHoldingPeriod = () => {
-    if (!stock.entryDate) return 'N/A';
-    const entry = new Date(stock.entryDate);
-    const now = new Date();
-    const hours = Math.floor((now - entry) / (1000 * 60 * 60));
-    return `${hours} hours`;
+      if (result?.success) {
+        onSubmit(exitData);
+        setOrderStatus('success');
+        
+        setTimeout(() => {
+          onClose();
+        }, 1500);
+      } else {
+        setOrderStatus('failed');
+        alert(isHindi ? `एग्ज़िट फेल: ${result?.message}` : `Exit failed: ${result?.message}`);
+      }
+    } catch (error) {
+      console.error('Exit error:', error);
+      setOrderStatus('failed');
+    }
   };
 
   const getExitRecommendation = () => {
     const profitPercent = ((realTimePrice - stock.entryPrice) / stock.entryPrice * 100);
     
     if (profitPercent >= 4) return {
-      type: 'strong_buy',
-      text: 'Strong Profit - Consider Booking',
-      color: 'text-green-600',
-      bg: 'bg-green-50',
+      type: 'strong_exit',
+      text: isHindi ? 'स्ट्रॉन्ग प्रॉफिट - बुक करें' : 'Strong Profit - Consider Booking',
+      color: 'text-emerald-400',
+      bg: 'bg-emerald-500/20',
       icon: <TrendingUp className="w-4 h-4" />
     };
     if (profitPercent >= 2) return {
       type: 'hold',
-      text: 'Moderate Profit - Hold or Book Partial',
-      color: 'text-yellow-600',
-      bg: 'bg-yellow-50',
+      text: isHindi ? 'मॉडरेट प्रॉफिट - होल्ड या आंशिक बुक' : 'Moderate Profit - Hold or Book Partial',
+      color: 'text-amber-400',
+      bg: 'bg-amber-500/20',
       icon: <Clock className="w-4 h-4" />
     };
     if (profitPercent <= -2) return {
-      type: 'sell',
-      text: 'Stop Loss Hit - Exit Now',
-      color: 'text-red-600',
-      bg: 'bg-red-50',
+      type: 'exit',
+      text: isHindi ? 'स्टॉप लॉस हिट - अभी एक्ज़िट करें' : 'Stop Loss Hit - Exit Now',
+      color: 'text-red-400',
+      bg: 'bg-red-500/20',
       icon: <AlertTriangle className="w-4 h-4" />
     };
     
     return {
       type: 'neutral',
-      text: 'Neutral - Monitor Closely',
-      color: 'text-blue-600',
-      bg: 'bg-blue-50',
+      text: isHindi ? 'न्यूट्रल - क्लोज़ली मॉनिटर करें' : 'Neutral - Monitor Closely',
+      color: 'text-cyan-400',
+      bg: 'bg-cyan-500/20',
       icon: <BarChart3 className="w-4 h-4" />
     };
   };
 
   const recommendation = getExitRecommendation();
+  const profitPercent = ((realTimePrice - stock.entryPrice) / stock.entryPrice * 100).toFixed(2);
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+      <div className="bg-gradient-to-br from-slate-900 to-slate-950 rounded-2xl border border-emerald-900/40 w-full max-w-lg max-h-[90vh] overflow-y-auto">
         <div className="p-6">
+          {/* HEADER */}
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center space-x-3">
-              <div className="p-2 bg-red-100 rounded-lg">
-                <TrendingDown className="w-5 h-5 text-red-600" />
+              <div className="p-2 rounded-xl bg-red-500/20">
+                <TrendingDown className="w-5 h-5 text-red-400" />
               </div>
               <div>
-                <h2 className="text-xl font-bold">Exit Trade - {stock.symbol}</h2>
-                <p className="text-sm text-gray-600">Manage your position</p>
+                <h2 className="text-xl font-bold text-white">
+                  {isHindi ? 'ट्रेड से एक्ज़िट करें' : 'Exit Trade'} - {stock.symbol}
+                </h2>
+                <p className="text-sm text-emerald-300/60">
+                  {isHindi ? 'अपनी पोजिशन मैनेज करें' : 'Manage your position'}
+                </p>
               </div>
             </div>
-            <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
-              <X className="w-5 h-5" />
+            <button 
+              onClick={onClose}
+              className="p-2 hover:bg-slate-800/50 rounded-xl transition-colors"
+            >
+              <X className="w-5 h-5 text-emerald-400" />
             </button>
           </div>
 
-          {/* Real-time Status Bar */}
-          <div className={`p-3 rounded-lg mb-4 ${recommendation.bg}`}>
+          {/* RECOMMENDATION */}
+          <div className={`p-3 rounded-xl mb-4 border ${recommendation.bg} ${recommendation.color}`}>
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 {recommendation.icon}
-                <span className={`font-medium ${recommendation.color}`}>
+                <span className="font-medium">
                   {recommendation.text}
                 </span>
               </div>
-              <div className={`text-lg font-bold ${realTimePrice >= stock.entryPrice ? 'text-green-600' : 'text-red-600'}`}>
-                {realTimePrice >= stock.entryPrice ? '+' : ''}
-                {((realTimePrice - stock.entryPrice) / stock.entryPrice * 100).toFixed(2)}%
+              <div className={`text-lg font-bold ${profitPercent >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                {profitPercent >= 0 ? '+' : ''}{profitPercent}%
               </div>
             </div>
           </div>
 
-          {/* Quick Exit Suggestions */}
+          {/* QUICK EXIT SUGGESTIONS */}
           {exitSuggestions.length > 0 && (
             <div className="mb-4">
-              <h3 className="font-medium mb-2 flex items-center space-x-2">
-                <Zap className="w-4 h-4" />
-                <span>Quick Exit Suggestions</span>
+              <h3 className="font-medium text-white mb-2 flex items-center space-x-2">
+                <Shield className="w-4 h-4" />
+                <span>{isHindi ? 'क्विक एक्ज़िट सजेशन' : 'Quick Exit Suggestions'}</span>
               </h3>
               <div className="space-y-2">
                 {exitSuggestions.map((suggestion, index) => (
                   <button
                     key={index}
                     onClick={() => handleAutoExit(suggestion)}
-                    className={`w-full text-left p-3 rounded-lg border transition-colors ${
+                    className={`w-full text-left p-3 rounded-xl border transition-all ${
                       suggestion.type === 'take_profit' 
-                        ? 'border-green-200 bg-green-50 hover:bg-green-100'
+                        ? 'border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20'
                         : suggestion.type === 'cut_loss'
-                        ? 'border-red-200 bg-red-50 hover:bg-red-100'
-                        : 'border-yellow-200 bg-yellow-50 hover:bg-yellow-100'
+                        ? 'border-red-500/30 bg-red-500/10 hover:bg-red-500/20'
+                        : 'border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20'
                     }`}
                   >
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="font-medium">{suggestion.title}</p>
-                        <p className="text-xs text-gray-600">{suggestion.description}</p>
+                        <p className="font-medium text-white">{suggestion.title}</p>
+                        <p className="text-xs text-emerald-300/60">{suggestion.description}</p>
                       </div>
-                      <div className="text-sm font-medium">
-                        {suggestion.exitPercent}% Exit
+                      <div className="text-sm font-medium text-white">
+                        {suggestion.exitPercent}% {isHindi ? 'एग्ज़िट' : 'Exit'}
                       </div>
                     </div>
                   </button>
@@ -276,217 +272,161 @@ const ExitPopup = ({ stock, onClose, onSubmit }) => {
 
           <form onSubmit={(e) => { e.preventDefault(); handleSubmit(); }}>
             <div className="space-y-4">
-              {/* Trade Summary */}
-              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                <h3 className="font-medium mb-3">Trade Details</h3>
+              {/* TRADE SUMMARY */}
+              <div className="bg-gradient-to-r from-slate-800/50 to-slate-900/30 rounded-xl p-4 border border-emerald-900/40">
+                <h3 className="font-medium text-white mb-3">{isHindi ? 'ट्रेड डिटेल्स' : 'Trade Details'}</h3>
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
-                    <p className="text-gray-600">Entry Price:</p>
-                    <p className="font-medium">₹{stock.entryPrice.toFixed(2)}</p>
+                    <p className="text-emerald-300/60">{isHindi ? 'एंट्री प्राइस:' : 'Entry Price:'}</p>
+                    <p className="font-medium text-white">₹{parseFloat(stock.entryPrice || 0).toFixed(2)}</p>
                   </div>
                   <div>
-                    <p className="text-gray-600">Current Price:</p>
-                    <p className="font-medium">₹{realTimePrice.toFixed(2)}</p>
+                    <p className="text-emerald-300/60">{isHindi ? 'करंट प्राइस:' : 'Current Price:'}</p>
+                    <p className="font-medium text-white">₹{realTimePrice.toFixed(2)}</p>
                   </div>
                   <div>
-                    <p className="text-gray-600">Quantity:</p>
-                    <p className="font-medium">{stock.quantity || 1} shares</p>
+                    <p className="text-emerald-300/60">{isHindi ? 'क्वांटिटी:' : 'Quantity:'}</p>
+                    <p className="font-medium text-white">{stock.quantity || 1} {isHindi ? 'शेयर' : 'shares'}</p>
                   </div>
                   <div>
-                    <p className="text-gray-600">Holding:</p>
-                    <p className="font-medium">{calculateHoldingPeriod()}</p>
+                    <p className="text-emerald-300/60">{isHindi ? 'पी/एल:' : 'P/L:'}</p>
+                    <p className={`font-medium ${profitPercent >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {profitPercent >= 0 ? '+' : ''}{profitPercent}%
+                    </p>
                   </div>
                 </div>
               </div>
 
-              {/* Exit Configuration */}
+              {/* EXIT CONFIGURATION */}
               <div className="space-y-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Exit Price (₹)</label>
+                  <label className="block text-sm font-medium text-emerald-300 mb-2">
+                    {isHindi ? 'एग्ज़िट प्राइस (₹)' : 'Exit Price (₹)'}
+                  </label>
                   <input
                     type="number"
                     step="0.01"
                     value={formData.exitPrice}
                     onChange={(e) => setFormData({ ...formData, exitPrice: parseFloat(e.target.value) })}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full bg-slate-800/50 border border-emerald-900/40 text-white rounded-xl px-3 py-2 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none"
                     required
                   />
                   <div className="flex justify-between mt-1">
                     <button
                       type="button"
                       onClick={() => setFormData({ ...formData, exitPrice: realTimePrice })}
-                      className="text-xs text-blue-600 hover:text-blue-800"
+                      className="text-xs text-emerald-400 hover:text-emerald-300"
                     >
-                      Use Current (₹{realTimePrice.toFixed(2)})
+                      {isHindi ? 'करंट यूज़ करें' : 'Use Current'} (₹{realTimePrice.toFixed(2)})
                     </button>
                     <button
                       type="button"
                       onClick={() => setFormData({ ...formData, exitPrice: stock.targetPrice || (stock.entryPrice * 1.04) })}
-                      className="text-xs text-green-600 hover:text-green-800"
+                      className="text-xs text-emerald-400 hover:text-emerald-300"
                     >
-                      Use Target (₹{(stock.targetPrice || (stock.entryPrice * 1.04)).toFixed(2)})
+                      {isHindi ? 'टारगेट यूज़ करें' : 'Use Target'} (₹{(stock.targetPrice || (stock.entryPrice * 1.04)).toFixed(2)})
                     </button>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Exit Quantity</label>
+                    <label className="block text-sm font-medium text-emerald-300 mb-2">
+                      {isHindi ? 'एग्ज़िट क्वांटिटी' : 'Exit Quantity'}
+                    </label>
                     <select
                       value={formData.exitQuantity}
                       onChange={(e) => setFormData({ ...formData, exitQuantity: parseInt(e.target.value) })}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      className="w-full bg-slate-800/50 border border-emerald-900/40 text-white rounded-xl px-3 py-2 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none"
                     >
-                      <option value={stock.quantity || 1}>Full ({stock.quantity || 1} shares)</option>
-                      <option value={Math.floor((stock.quantity || 1) * 0.5)}>Half ({(stock.quantity || 1) * 0.5} shares)</option>
-                      <option value={Math.floor((stock.quantity || 1) * 0.25)}>Quarter ({(stock.quantity || 1) * 0.25} shares)</option>
+                      <option value={stock.quantity || 1}>
+                        {isHindi ? 'फुल' : 'Full'} ({stock.quantity || 1} {isHindi ? 'शेयर' : 'shares'})
+                      </option>
+                      <option value={Math.floor((stock.quantity || 1) * 0.5)}>
+                        {isHindi ? 'आधा' : 'Half'} ({Math.floor((stock.quantity || 1) * 0.5)} {isHindi ? 'शेयर' : 'shares'})
+                      </option>
+                      <option value={Math.floor((stock.quantity || 1) * 0.25)}>
+                        {isHindi ? 'चौथाई' : 'Quarter'} ({Math.floor((stock.quantity || 1) * 0.25)} {isHindi ? 'शेयर' : 'shares'})
+                      </option>
                     </select>
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Exit Type</label>
+                    <label className="block text-sm font-medium text-emerald-300 mb-2">
+                      {isHindi ? 'एग्ज़िट टाइप' : 'Exit Type'}
+                    </label>
                     <select
-                      value={formData.exitType}
-                      onChange={(e) => setFormData({ ...formData, exitType: e.target.value })}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      value={formData.exitReason}
+                      onChange={(e) => setFormData({ ...formData, exitReason: e.target.value })}
+                      className="w-full bg-slate-800/50 border border-emerald-900/40 text-white rounded-xl px-3 py-2 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none"
                     >
-                      <option value="target_hit">Target Hit</option>
-                      <option value="stop_loss_hit">Stop Loss Hit</option>
-                      <option value="partial_profit">Partial Profit</option>
-                      <option value="market_condition">Market Condition</option>
-                      <option value="manual_exit">Manual Exit</option>
-                      <option value="time_based">Time Based</option>
-                      <option value="trailing_exit">Trailing Exit</option>
+                      <option value="target_hit">{isHindi ? 'टारगेट हिट' : 'Target Hit'}</option>
+                      <option value="stop_loss_hit">{isHindi ? 'स्टॉप लॉस हिट' : 'Stop Loss Hit'}</option>
+                      <option value="partial_profit">{isHindi ? 'आंशिक प्रॉफिट' : 'Partial Profit'}</option>
+                      <option value="market_condition">{isHindi ? 'मार्केट कंडीशन' : 'Market Condition'}</option>
+                      <option value="manual_exit">{isHindi ? 'मैनुअल एक्ज़िट' : 'Manual Exit'}</option>
                     </select>
                   </div>
                 </div>
 
-                {formData.exitType === 'partial_profit' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Exit Percentage</label>
-                    <input
-                      type="range"
-                      min="1"
-                      max="100"
-                      value={Math.floor((formData.exitQuantity / (stock.quantity || 1)) * 100)}
-                      onChange={(e) => {
-                        const percent = parseInt(e.target.value);
-                        const quantity = Math.floor(((stock.quantity || 1) * percent) / 100);
-                        setFormData({ ...formData, exitQuantity: quantity });
-                      }}
-                      className="w-full"
-                    />
-                    <div className="flex justify-between text-xs text-gray-500 mt-1">
-                      <span>1%</span>
-                      <span className="font-medium">
-                        {Math.floor((formData.exitQuantity / (stock.quantity || 1)) * 100)}%
-                      </span>
-                      <span>100%</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Advanced Options */}
-              <div className="border border-gray-200 rounded-lg p-4">
-                <h3 className="font-medium mb-3">Advanced Exit Options</h3>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <input
-                        type="checkbox"
-                        id="trailingExit"
-                        checked={formData.trailingExit}
-                        onChange={(e) => setFormData({ ...formData, trailingExit: e.target.checked })}
-                        className="rounded border-gray-300"
-                      />
-                      <label htmlFor="trailingExit" className="text-sm">
-                        Trailing Stop Loss Exit
-                      </label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <input
-                        type="checkbox"
-                        id="partialExit"
-                        checked={formData.partialExit}
-                        onChange={(e) => setFormData({ ...formData, partialExit: e.target.checked })}
-                        className="rounded border-gray-300"
-                      />
-                      <label htmlFor="partialExit" className="text-sm">
-                        Schedule Partial Exit
-                      </label>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Exit Reason</label>
-                    <textarea
-                      value={formData.notes}
-                      onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                      placeholder="Why are you exiting this trade? (e.g., target achieved, market turned, news event)"
-                      rows="2"
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    />
-                  </div>
+                {/* NOTES */}
+                <div>
+                  <label className="block text-sm font-medium text-emerald-300 mb-2">
+                    {isHindi ? 'एग्ज़िट कारण' : 'Exit Reason'}
+                  </label>
+                  <textarea
+                    value={formData.notes}
+                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                    placeholder={isHindi ? 'इस ट्रेड से एक्ज़िट क्यों कर रहे हैं?' : 'Why are you exiting this trade?'}
+                    rows="2"
+                    className="w-full bg-slate-800/50 border border-emerald-900/40 text-white rounded-xl px-3 py-2 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none"
+                  />
                 </div>
               </div>
 
-              {/* P&L Summary */}
-              <div className="bg-gradient-to-r from-blue-50 to-purple-50 p-4 rounded-lg border border-blue-100">
-                <h3 className="font-medium mb-3">Exit Summary</h3>
+              {/* P&L SUMMARY */}
+              <div className="bg-gradient-to-r from-emerald-900/20 to-cyan-900/10 p-4 rounded-xl border border-emerald-900/40">
+                <h3 className="font-medium text-white mb-3">{isHindi ? 'एग्ज़िट समरी' : 'Exit Summary'}</h3>
                 <div className="space-y-3">
                   <div className="flex justify-between items-center">
-                    <span>Profit/Loss:</span>
-                    <span className={`text-lg font-bold ${formData.exitPrice >= stock.entryPrice ? 'text-green-600' : 'text-red-600'}`}>
+                    <span className="text-emerald-300/70">{isHindi ? 'प्रॉफिट/लॉस:' : 'Profit/Loss:'}</span>
+                    <span className={`text-lg font-bold ${profitPercent >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                       ₹{(formData.exitPrice - stock.entryPrice).toFixed(2)}
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span>Profit/Loss %:</span>
-                    <span className={`text-lg font-bold ${formData.exitPrice >= stock.entryPrice ? 'text-green-600' : 'text-red-600'}`}>
+                    <span className="text-emerald-300/70">{isHindi ? 'प्रॉफिट/लॉस %:' : 'Profit/Loss %:'}</span>
+                    <span className={`text-lg font-bold ${profitPercent >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                       {(((formData.exitPrice - stock.entryPrice) / stock.entryPrice) * 100).toFixed(2)}%
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span>Total P&L:</span>
-                    <span className={`text-xl font-bold ${(formData.exitPrice - stock.entryPrice) * formData.exitQuantity >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    <span className="text-emerald-300/70">{isHindi ? 'टोटल पी/एल:' : 'Total P&L:'}</span>
+                    <span className={`text-xl font-bold ${
+                      (formData.exitPrice - stock.entryPrice) * formData.exitQuantity >= 0 
+                        ? 'text-emerald-400' 
+                        : 'text-red-400'
+                    }`}>
                       ₹{((formData.exitPrice - stock.entryPrice) * formData.exitQuantity).toFixed(2)}
                     </span>
-                  </div>
-                  
-                  {/* Performance Indicator */}
-                  <div className="pt-3 border-t border-gray-200">
-                    <div className="flex items-center justify-between text-sm">
-                      <span>Performance:</span>
-                      <div className={`px-3 py-1 rounded-full ${
-                        ((formData.exitPrice - stock.entryPrice) / stock.entryPrice * 100) >= 3 
-                          ? 'bg-green-100 text-green-800'
-                          : ((formData.exitPrice - stock.entryPrice) / stock.entryPrice * 100) <= -2
-                          ? 'bg-red-100 text-red-800'
-                          : 'bg-yellow-100 text-yellow-800'
-                      }`}>
-                        {((formData.exitPrice - stock.entryPrice) / stock.entryPrice * 100) >= 3 ? 'Excellent' :
-                         ((formData.exitPrice - stock.entryPrice) / stock.entryPrice * 100) <= -2 ? 'Poor' : 'Average'}
-                      </div>
-                    </div>
                   </div>
                 </div>
               </div>
 
-              {/* Action Buttons */}
-              <div className="flex space-x-3 pt-4">
+              {/* ACTION BUTTONS */}
+              <div className="flex space-x-3 pt-2">
                 <button
                   type="button"
                   onClick={onClose}
-                  className="flex-1 border border-gray-300 text-gray-700 py-3 px-4 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+                  className="flex-1 border border-emerald-900/40 text-emerald-300 py-3 px-4 rounded-xl font-medium hover:bg-emerald-900/20 transition-all"
                   disabled={orderStatus === 'placing'}
                 >
-                  Cancel
+                  {isHindi ? 'कैंसल' : 'Cancel'}
                 </button>
                 <button
                   type="submit"
                   disabled={orderStatus === 'placing'}
-                  className={`flex-1 py-3 px-4 rounded-lg font-medium transition-colors duration-200 flex items-center justify-center space-x-2 ${
+                  className={`flex-1 py-3 px-4 rounded-xl font-medium transition-all duration-200 flex items-center justify-center space-x-2 ${
                     orderStatus === 'placing'
                       ? 'bg-red-400 cursor-not-allowed'
                       : 'bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-700 hover:to-orange-700 text-white'
@@ -495,34 +435,20 @@ const ExitPopup = ({ stock, onClose, onSubmit }) => {
                   {orderStatus === 'placing' ? (
                     <>
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                      <span>Exiting...</span>
+                      <span>{isHindi ? 'एग्ज़िट हो रहा...' : 'Exiting...'}</span>
                     </>
                   ) : orderStatus === 'success' ? (
                     <>
                       <Check className="w-5 h-5" />
-                      <span>Exit Successful!</span>
+                      <span>{isHindi ? 'एग्ज़िट सक्सेस!' : 'Exit Success!'}</span>
                     </>
                   ) : (
                     <>
                       <TrendingDown className="w-5 h-5" />
-                      <span>Exit Trade</span>
+                      <span>{isHindi ? 'एग्ज़िट ट्रेड' : 'Exit Trade'}</span>
                     </>
                   )}
                 </button>
-              </div>
-
-              {/* Market Status */}
-              <div className="pt-2">
-                <div className="flex items-center justify-between text-xs text-gray-500">
-                  <div className="flex items-center space-x-1">
-                    <div className={`w-2 h-2 rounded-full ${
-                      priceTrend === 'bullish' ? 'bg-green-500' :
-                      priceTrend === 'bearish' ? 'bg-red-500' : 'bg-yellow-500'
-                    }`}></div>
-                    <span>Market: {priceTrend === 'bullish' ? 'Bullish' : priceTrend === 'bearish' ? 'Bearish' : 'Neutral'}</span>
-                  </div>
-                  <span>Real-time updates active</span>
-                </div>
               </div>
             </div>
           </form>
