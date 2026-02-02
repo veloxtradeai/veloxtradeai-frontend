@@ -227,6 +227,19 @@ export const portfolioAPI = {
   }
 };
 
+// Analytics API (for Dashboard.jsx)
+export const analyticsAPI = {
+  getPortfolio: async () => {
+    const userId = localStorage.getItem('user_id') || 'demo_user';
+    return await makeRequest(`/api/analytics/portfolio?user_id=${userId}`);
+  },
+  
+  getAnalytics: async () => {
+    const userId = localStorage.getItem('user_id') || 'demo_user';
+    return await makeRequest(`/api/analytics/portfolio?user_id=${userId}`);
+  }
+};
+
 // Subscription API
 export const subscriptionAPI = {
   checkSubscription: async () => {
@@ -289,6 +302,7 @@ export default {
   holdingsAPI,
   tradesAPI,
   portfolioAPI,
+  analyticsAPI,
   subscriptionAPI,
   setupWebSocket
 };
