@@ -240,6 +240,42 @@ export const analyticsAPI = {
   }
 };
 
+// Settings API (for Settings.jsx)
+export const settingsAPI = {
+  updateProfile: async (profileData) => {
+    const userId = localStorage.getItem('user_id') || 'demo_user';
+    return await makeRequest('/api/settings/profile', {
+      method: 'PUT',
+      body: JSON.stringify({ ...profileData, user_id: userId })
+    });
+  },
+  
+  updatePreferences: async (preferences) => {
+    const userId = localStorage.getItem('user_id') || 'demo_user';
+    return await makeRequest('/api/settings/preferences', {
+      method: 'PUT',
+      body: JSON.stringify({ preferences, user_id: userId })
+    });
+  },
+  
+  getSettings: async () => {
+    const userId = localStorage.getItem('user_id') || 'demo_user';
+    return await makeRequest(`/api/settings?user_id=${userId}`);
+  },
+  
+  updatePassword: async (currentPassword, newPassword) => {
+    const userId = localStorage.getItem('user_id') || 'demo_user';
+    return await makeRequest('/api/settings/password', {
+      method: 'PUT',
+      body: JSON.stringify({ 
+        current_password: currentPassword, 
+        new_password: newPassword,
+        user_id: userId 
+      })
+    });
+  }
+};
+
 // Subscription API
 export const subscriptionAPI = {
   checkSubscription: async () => {
@@ -303,6 +339,7 @@ export default {
   tradesAPI,
   portfolioAPI,
   analyticsAPI,
+  settingsAPI,
   subscriptionAPI,
   setupWebSocket
 };
