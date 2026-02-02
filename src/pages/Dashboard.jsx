@@ -8,12 +8,9 @@ import {
   TrendingUp, 
   TrendingDown, 
   DollarSign, 
-  BarChart3,
-  Clock,
   RefreshCw,
   Zap,
   Target,
-  Shield,
   Activity,
   Wifi,
   WifiOff,
@@ -23,27 +20,32 @@ import {
   Server,
   AlertTriangle,
   CheckCircle,
-  XCircle,
-  TrendingUp as TrendingUpIcon,
-  TrendingDown as TrendingDownIcon,
-  PieChart,
-  Users,
-  Eye,
-  Battery,
   BarChart2,
+  Shield,
+  Clock,
+  Users,
+  PieChart,
   LineChart,
-  Calendar,
-  Clock as ClockIcon,
-  Shield as ShieldIcon,
-  Bell,
-  Settings
+  Settings,
+  Bell
 } from 'lucide-react';
 
+// API Service imports
+import {
+  healthAPI,
+  marketAPI,
+  aiAPI,
+  brokerAPI,
+  tradesAPI,
+  analyticsAPI,
+  setupWebSocket
+} from '../services/api';
+
 const Dashboard = () => {
-  const { t, isHindi, language } = useLanguage();
-  const { user, token } = useAuth();
+  const { t, isHindi } = useLanguage();
+  const { user, token, logout } = useAuth();
   
-  // REAL STATE - NO DUMMY
+  // REAL STATE - NO DUMMY DATA
   const [portfolioStats, setPortfolioStats] = useState({
     totalValue: 0,
     dailyPnL: 0,
@@ -64,256 +66,225 @@ const Dashboard = () => {
   const [lastUpdate, setLastUpdate] = useState(new Date());
   const [popupData, setPopupData] = useState(null);
   const [exitPopupData, setExitPopupData] = useState(null);
+  
   const [loading, setLoading] = useState({
-    stocks: true,
-    portfolio: true,
-    trades: true
+    stocks: false,
+    portfolio: false,
+    trades: false,
+    brokers: false
   });
+  
   const [filters, setFilters] = useState({
     signal: 'all',
     risk: 'all',
     timeFrame: 'intraday'
   });
+  
   const [marketStatus, setMarketStatus] = useState({
     isOpen: true,
     nextOpen: '09:15',
-    nextClose: '15:30'
+    nextClose: '15:30',
+    message: 'Market is open'
   });
-  const [error, setError] = useState(null);
+  
   const [connectionStatus, setConnectionStatus] = useState({
     broker: false,
     websocket: false,
     api: false,
     database: false
   });
+  
+  const [error, setError] = useState(null);
+  const [successMessage, setSuccessMessage] = useState(null);
 
-  // REAL DATA FETCH FUNCTIONS - NO DUMMY
-  const checkBackendHealth = useCallback(async () => {
+  // ======================
+  // REAL DATA FETCH FUNCTIONS
+  // ======================
+
+  // Check backend connection
+  const checkBackendConnection = useCallback(async () => {
     try {
-      const response = await fetch('https://veloxtradeai-api.velox-trade-ai.workers.dev/api/health');
-      const data = await response.json();
-      
-      if (data && data.status === 'online') {
-        setIsBackendConnected(true);
-        setConnectionStatus(prev => ({ ...prev, api: true }));
-        return true;
-      }
-      return false;
+      const health = await healthAPI.check();
+      const isHealthy = health && health.status === 'online';
+      setIsBackendConnected(isHealthy);
+      setConnectionStatus(prev => ({ ...prev, api: isHealthy }));
+      return isHealthy;
     } catch (error) {
-      console.error('❌ Backend health check failed:', error);
+      console.error('Backend connection check failed:', error);
       setIsBackendConnected(false);
-      setConnectionStatus(prev => ({ ...prev, api: false }));
       return false;
     }
   }, []);
 
-  const fetchRealPortfolio = useCallback(async () => {
-    if (!user?.id || !token) return;
-    
-    try {
-      const response = await fetch(
-        `https://veloxtradeai-api.velox-trade-ai.workers.dev/api/analytics/portfolio?user_id=${user.id}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-      
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && data.portfolio) {
-          setPortfolioStats({
-            totalValue: parseFloat(data.portfolio.current_value) || 0,
-            dailyPnL: parseFloat(data.portfolio.total_pnl) || 0,
-            winRate: data.portfolio.win_rate || '0%',
-            activeTrades: data.portfolio.open_trades || 0,
-            holdingsCount: data.portfolio.holdings_count || 0,
-            investedValue: parseFloat(data.portfolio.total_investment) || 0,
-            returnsPercent: parseFloat(data.portfolio.pnl_percentage) || 0,
-            todayProfit: parseFloat(data.portfolio.daily_pnl) || 0,
-            monthlyReturn: parseFloat(data.portfolio.monthly_return) || 0,
-            maxDrawdown: parseFloat(data.portfolio.max_drawdown) || 0
-          });
-        }
-      }
-    } catch (error) {
-      console.error('❌ Portfolio fetch error:', error);
-    }
-  }, [user, token]);
-
-  const fetchRealStocks = useCallback(async () => {
-    setLoading(prev => ({ ...prev, stocks: true }));
-    
-    try {
-      // Fetch AI signals with high confidence
-      const response = await fetch(
-        'https://veloxtradeai-api.velox-trade-ai.workers.dev/api/ai/signals'
-      );
-      
-      if (response.ok) {
-        const data = await response.json();
-        
-        if (data.success && data.signals && data.signals.length > 0) {
-          const stocksWithMarketData = [];
-          
-          // Fetch real market data for each signal
-          for (const signal of data.signals.slice(0, 8)) {
-            try {
-              const marketResponse = await fetch(
-                `https://veloxtradeai-api.velox-trade-ai.workers.dev/api/market/realtime?symbol=${signal.symbol}`
-              );
-              
-              if (marketResponse.ok) {
-                const marketData = await marketResponse.json();
-                
-                if (marketData.success) {
-                  stocksWithMarketData.push({
-                    symbol: signal.symbol,
-                    name: signal.symbol === 'RELIANCE' ? 'Reliance Industries' : 
-                          signal.symbol === 'TCS' ? 'Tata Consultancy' :
-                          signal.symbol === 'HDFCBANK' ? 'HDFC Bank' :
-                          signal.symbol === 'INFY' ? 'Infosys' :
-                          signal.symbol === 'ICICIBANK' ? 'ICICI Bank' : signal.symbol,
-                    currentPrice: marketData.data?.last_price || 0,
-                    change: marketData.data?.change || 0,
-                    changePercent: marketData.data?.change_percent || 0,
-                    volume: marketData.data?.volume || 0,
-                    signal: signal.action || 'HOLD',
-                    confidence: parseFloat(signal.confidence) || 0,
-                    targetPrice: parseFloat(signal.target_price) || 0,
-                    stopLoss: parseFloat(signal.stop_loss) || 0,
-                    entryPrice: parseFloat(signal.entry_price) || 0,
-                    riskLevel: parseFloat(signal.confidence) >= 90 ? 'low' : 
-                              parseFloat(signal.confidence) >= 85 ? 'medium' : 'high',
-                    timeFrame: 'intraday',
-                    lastUpdated: new Date().toISOString(),
-                    reason: signal.reason || 'AI Analysis',
-                    quantity: signal.quantity || Math.floor(10000 / (marketData.data?.last_price || 1))
-                  });
-                }
-              }
-            } catch (error) {
-              console.error(`Error fetching market data for ${signal.symbol}:`, error);
-            }
-          }
-          
-          setRealStocks(stocksWithMarketData);
-          
-          // Auto popup for highest confidence signal
-          if (stocksWithMarketData.length > 0) {
-            const highestConfidence = stocksWithMarketData.reduce((prev, current) => 
-              (prev.confidence > current.confidence) ? prev : current
-            );
-            
-            if (highestConfidence.confidence >= 85 && !popupData) {
-              setPopupData({
-                stock: highestConfidence,
-                action: highestConfidence.signal,
-                entry: highestConfidence.entryPrice,
-                target: highestConfidence.targetPrice,
-                stoploss: highestConfidence.stopLoss,
-                quantity: highestConfidence.quantity,
-                confidence: highestConfidence.confidence
-              });
-            }
-          }
-        }
-      }
-    } catch (error) {
-      console.error('❌ Stocks fetch error:', error);
-      setError(isHindi ? 'स्टॉक डेटा लोड नहीं हो सका' : 'Failed to load stock data');
-    } finally {
-      setLoading(prev => ({ ...prev, stocks: false }));
-    }
-  }, [isHindi, popupData]);
-
-  const fetchRealTrades = useCallback(async () => {
-    if (!user?.id || !token) return;
-    
-    try {
-      // Note: You need to create this endpoint in backend
-      const response = await fetch(
-        `https://veloxtradeai-api.velox-trade-ai.workers.dev/api/trades/active?user_id=${user.id}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-      
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && data.trades) {
-          setRealTrades(data.trades);
-        }
-      } else {
-        // Fallback - get from portfolio
-        fetchRealPortfolio();
-      }
-    } catch (error) {
-      console.error('❌ Trades fetch error:', error);
-    }
-  }, [user, token, fetchRealPortfolio]);
-
-  const fetchRealBrokers = useCallback(async () => {
+  // Fetch real portfolio data
+  const fetchPortfolioData = useCallback(async () => {
     if (!user?.id) return;
     
+    setLoading(prev => ({ ...prev, portfolio: true }));
     try {
-      const response = await fetch(
-        `https://veloxtradeai-api.velox-trade-ai.workers.dev/api/brokers?user_id=${user.id}`
-      );
-      
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && data.brokers) {
-          setRealBrokers(data.brokers);
-          const activeBrokers = data.brokers.filter(b => b.is_active);
-          setConnectionStatus(prev => ({
-            ...prev,
-            broker: activeBrokers.length > 0
-          }));
-        }
+      const result = await analyticsAPI.getPortfolio();
+      if (result?.success && result.portfolio) {
+        setPortfolioStats({
+          totalValue: parseFloat(result.portfolio.current_value) || 0,
+          dailyPnL: parseFloat(result.portfolio.daily_pnl) || 0,
+          winRate: result.portfolio.win_rate || '0%',
+          activeTrades: result.portfolio.open_trades || 0,
+          holdingsCount: result.portfolio.holdings_count || 0,
+          investedValue: parseFloat(result.portfolio.total_investment) || 0,
+          returnsPercent: parseFloat(result.portfolio.pnl_percentage) || 0,
+          todayProfit: parseFloat(result.portfolio.daily_pnl) || 0,
+          monthlyReturn: parseFloat(result.portfolio.monthly_return) || 0,
+          maxDrawdown: parseFloat(result.portfolio.max_drawdown) || 0
+        });
       }
     } catch (error) {
-      console.error('❌ Brokers fetch error:', error);
+      console.error('Portfolio fetch error:', error);
+    } finally {
+      setLoading(prev => ({ ...prev, portfolio: false }));
     }
   }, [user]);
 
-  const fetchAllData = useCallback(async () => {
-    const isHealthy = await checkBackendHealth();
+  // Fetch real AI signals and stocks
+  const fetchAISignals = useCallback(async () => {
+    if (!isBackendConnected) return;
     
-    if (!isHealthy) {
-      setError(isHindi ? 'बैकेंड कनेक्ट नहीं हो पा रहा है' : 'Backend connection failed');
+    setLoading(prev => ({ ...prev, stocks: true }));
+    try {
+      const result = await aiAPI.getSignals();
+      if (result?.success && result.signals && result.signals.length > 0) {
+        const stocksWithPrices = [];
+        
+        // Fetch current prices for each signal
+        for (const signal of result.signals.slice(0, 8)) {
+          try {
+            const marketResult = await marketAPI.getRealtimeData(signal.symbol);
+            if (marketResult?.success && marketResult.data) {
+              stocksWithPrices.push({
+                symbol: signal.symbol,
+                name: signal.name || signal.symbol,
+                currentPrice: parseFloat(marketResult.data.last_price) || 0,
+                change: parseFloat(marketResult.data.change) || 0,
+                changePercent: parseFloat(marketResult.data.change_percent) || 0,
+                volume: marketResult.data.volume || 0,
+                signal: signal.action,
+                confidence: parseFloat(signal.confidence) || 0,
+                targetPrice: parseFloat(signal.target_price) || 0,
+                stopLoss: parseFloat(signal.stop_loss) || 0,
+                entryPrice: parseFloat(signal.entry_price) || parseFloat(marketResult.data.last_price),
+                riskLevel: parseFloat(signal.confidence) >= 90 ? 'low' : 
+                          parseFloat(signal.confidence) >= 85 ? 'medium' : 'high',
+                timeFrame: signal.time_frame || 'intraday',
+                reason: signal.reason || 'AI Analysis',
+                quantity: signal.quantity || 1,
+                lastUpdated: new Date().toISOString()
+              });
+            }
+          } catch (error) {
+            console.error(`Error fetching price for ${signal.symbol}:`, error);
+          }
+        }
+        
+        setRealStocks(stocksWithPrices);
+        
+        // Check for high confidence signals for popup
+        if (stocksWithPrices.length > 0) {
+          const highConfidenceStocks = stocksWithPrices.filter(s => s.confidence >= 85);
+          if (highConfidenceStocks.length > 0 && !popupData) {
+            const bestStock = highConfidenceStocks[0];
+            setPopupData({
+              stock: bestStock,
+              action: bestStock.signal,
+              entry: bestStock.entryPrice,
+              target: bestStock.targetPrice,
+              stoploss: bestStock.stopLoss,
+              quantity: bestStock.quantity,
+              confidence: bestStock.confidence
+            });
+          }
+        }
+      }
+    } catch (error) {
+      console.error('AI signals fetch error:', error);
+    } finally {
+      setLoading(prev => ({ ...prev, stocks: false }));
+    }
+  }, [isBackendConnected, popupData]);
+
+  // Fetch active trades
+  const fetchActiveTrades = useCallback(async () => {
+    if (!user?.id) return;
+    
+    setLoading(prev => ({ ...prev, trades: true }));
+    try {
+      const result = await tradesAPI.getActiveTrades();
+      if (result?.success && result.trades) {
+        setRealTrades(result.trades);
+      }
+    } catch (error) {
+      console.error('Trades fetch error:', error);
+    } finally {
+      setLoading(prev => ({ ...prev, trades: false }));
+    }
+  }, [user]);
+
+  // Fetch broker connections
+  const fetchBrokers = useCallback(async () => {
+    if (!user?.id) return;
+    
+    setLoading(prev => ({ ...prev, brokers: true }));
+    try {
+      const result = await brokerAPI.getBrokers();
+      if (result?.success && result.brokers) {
+        setRealBrokers(result.brokers);
+        const activeBrokers = result.brokers.filter(b => b.is_active);
+        setConnectionStatus(prev => ({
+          ...prev,
+          broker: activeBrokers.length > 0
+        }));
+      }
+    } catch (error) {
+      console.error('Brokers fetch error:', error);
+    } finally {
+      setLoading(prev => ({ ...prev, brokers: false }));
+    }
+  }, [user]);
+
+  // Fetch all data
+  const fetchAllData = useCallback(async () => {
+    const isConnected = await checkBackendConnection();
+    if (!isConnected) {
+      setError(isHindi ? 'बैकेंड कनेक्शन विफल' : 'Backend connection failed');
       return;
     }
     
     setError(null);
     
     await Promise.all([
-      fetchRealPortfolio(),
-      fetchRealStocks(),
-      fetchRealTrades(),
-      fetchRealBrokers()
+      fetchPortfolioData(),
+      fetchAISignals(),
+      fetchActiveTrades(),
+      fetchBrokers()
     ]);
     
     setLastUpdate(new Date());
   }, [
-    checkBackendHealth, 
-    fetchRealPortfolio, 
-    fetchRealStocks, 
-    fetchRealTrades, 
-    fetchRealBrokers, 
+    checkBackendConnection,
+    fetchPortfolioData,
+    fetchAISignals,
+    fetchActiveTrades,
+    fetchBrokers,
     isHindi
   ]);
 
-  // AUTO REFRESH AND INITIAL LOAD
+  // ======================
+  // USE EFFECTS
+  // ======================
+
+  // Initial load and auto-refresh
   useEffect(() => {
     fetchAllData();
     
-    // Auto refresh every 30 seconds when market is open
+    // Refresh every 30 seconds when market is open
     const interval = setInterval(() => {
       const now = new Date();
       const hours = now.getHours();
@@ -328,7 +299,44 @@ const Dashboard = () => {
     return () => clearInterval(interval);
   }, [fetchAllData, isBackendConnected]);
 
+  // WebSocket for real-time updates
+  useEffect(() => {
+    if (!isBackendConnected) return;
+    
+    const cleanup = setupWebSocket((data) => {
+      console.log('WebSocket update:', data);
+      
+      switch (data.type) {
+        case 'market_update':
+          fetchAISignals();
+          break;
+        case 'signal_generated':
+          if (data.confidence >= 85) {
+            setPopupData({
+              stock: data,
+              action: data.action,
+              entry: data.entry_price,
+              target: data.target_price,
+              stoploss: data.stop_loss,
+              quantity: data.quantity,
+              confidence: data.confidence
+            });
+          }
+          break;
+        case 'trade_update':
+          fetchActiveTrades();
+          fetchPortfolioData();
+          break;
+      }
+    });
+    
+    return cleanup;
+  }, [isBackendConnected, fetchAISignals, fetchActiveTrades, fetchPortfolioData]);
+
+  // ======================
   // HELPER FUNCTIONS
+  // ======================
+
   const formatCurrency = useCallback((amount) => {
     if (amount === undefined || amount === null || isNaN(Number(amount))) {
       return '₹0';
@@ -341,8 +349,8 @@ const Dashboard = () => {
       return `₹${(num / 100000).toFixed(2)}L`;
     }
     return `₹${num.toLocaleString('en-IN', { 
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2 
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0 
     })}`;
   }, []);
 
@@ -352,8 +360,7 @@ const Dashboard = () => {
       const dateObj = date instanceof Date ? date : new Date(date);
       return dateObj.toLocaleTimeString('en-IN', { 
         hour: '2-digit', 
-        minute: '2-digit',
-        second: '2-digit'
+        minute: '2-digit'
       });
     } catch {
       return '--:--';
@@ -367,66 +374,69 @@ const Dashboard = () => {
     return Number(value).toFixed(decimals);
   }, []);
 
-  // HANDLE TRADE EXECUTION
+  // ======================
+  // TRADE HANDLERS
+  // ======================
+
   const handleTrade = useCallback(async (type, data) => {
     if (!connectionStatus.broker) {
-      alert(isHindi ? 'कृपया पहले ब्रोकर कनेक्ट करें!' : 'Please connect broker first!');
+      setError(isHindi ? 'कृपया पहले ब्रोकर कनेक्ट करें' : 'Please connect broker first');
+      setTimeout(() => setError(null), 3000);
       return;
     }
     
     if (!data?.stock?.symbol) {
-      alert(isHindi ? 'अमान्य स्टॉक डेटा!' : 'Invalid stock data!');
+      setError(isHindi ? 'अमान्य स्टॉक डेटा' : 'Invalid stock data');
+      setTimeout(() => setError(null), 3000);
       return;
     }
     
     try {
-      const response = await fetch(
-        'https://veloxtradeai-api.velox-trade-ai.workers.dev/api/trades/auto-entry',
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            user_id: user?.id,
-            symbol: data.stock.symbol,
-            action: type,
-            quantity: data.quantity || 1,
-            price: data.entry || data.stock.currentPrice,
-            stop_loss: data.stoploss || data.stock.stopLoss,
-            target_price: data.target || data.stock.targetPrice
-          })
-        }
-      );
+      const tradeData = {
+        symbol: data.stock.symbol,
+        action: type,
+        quantity: data.quantity || 1,
+        price: data.entry || data.stock.currentPrice,
+        stop_loss: data.stoploss || data.stock.stopLoss,
+        target_price: data.target || data.stock.targetPrice
+      };
       
-      const result = await response.json();
+      const result = await tradesAPI.executeTrade(tradeData);
       
-      if (result.success) {
-        alert(isHindi ? 
-          `✅ ऑर्डर सफल! आर्डर ID: ${result.trade_id}` : 
-          `✅ Order successful! Order ID: ${result.trade_id}`
+      if (result?.success) {
+        setSuccessMessage(
+          isHindi 
+            ? `✅ ट्रेड सफल: ${data.stock.symbol} ${type}`
+            : `✅ Trade successful: ${data.stock.symbol} ${type}`
         );
+        setTimeout(() => setSuccessMessage(null), 3000);
         
-        // Refresh all data
+        // Refresh data
         fetchAllData();
         
-        // Close popup
+        // Close popups
         setPopupData(null);
         setExitPopupData(null);
       } else {
-        alert(isHindi ? 
-          `❌ ऑर्डर विफल: ${result.message || 'अज्ञात त्रुटि'}` : 
-          `❌ Order failed: ${result.message || 'Unknown error'}`
-        );
+        setError(result?.error || (isHindi ? 'ट्रेड विफल' : 'Trade failed'));
+        setTimeout(() => setError(null), 3000);
       }
     } catch (error) {
-      console.error('Trade execution error:', error);
-      alert(isHindi ? 'ऑर्डर निष्पादन में त्रुटि!' : 'Order execution error!');
+      console.error('Trade error:', error);
+      setError(isHindi ? 'ट्रेड निष्पादन में त्रुटि' : 'Trade execution error');
+      setTimeout(() => setError(null), 3000);
     }
-  }, [connectionStatus.broker, isHindi, token, user, fetchAllData]);
+  }, [connectionStatus.broker, isHindi, fetchAllData]);
 
-  // FILTER STOCKS
+  const handleRefresh = useCallback(() => {
+    fetchAllData();
+    setLastUpdate(new Date());
+  }, [fetchAllData]);
+
+  // ======================
+  // MEMOIZED VALUES
+  // ======================
+
   const filteredStocks = useMemo(() => {
     return realStocks.filter(stock => {
       if (!stock) return false;
@@ -443,62 +453,51 @@ const Dashboard = () => {
         return false;
       }
       
-      return stock.confidence >= 70; // Only show stocks with good confidence
+      return stock.confidence >= 70;
     });
   }, [realStocks, filters]);
 
-  // CALCULATE STATS
-  const stats = useMemo(() => {
-    const totalValue = portfolioStats.totalValue || 0;
-    const dailyPnL = portfolioStats.dailyPnL || 0;
-    const returnsPercent = portfolioStats.returnsPercent || 0;
-    const winRate = portfolioStats.winRate || '0%';
-    const activeTrades = portfolioStats.activeTrades || 0;
-    const holdingsCount = portfolioStats.holdingsCount || 0;
+  const stats = useMemo(() => [
+    { 
+      title: isHindi ? 'पोर्टफोलियो मूल्य' : 'Portfolio Value', 
+      value: formatCurrency(portfolioStats.totalValue), 
+      change: `${portfolioStats.returnsPercent >= 0 ? '+' : ''}${safeToFixed(portfolioStats.returnsPercent)}%`, 
+      icon: <DollarSign className="w-5 h-5" />,
+      color: portfolioStats.returnsPercent >= 0 ? 'text-emerald-400' : 'text-red-400',
+      bgColor: portfolioStats.returnsPercent >= 0 ? 'bg-emerald-500/20' : 'bg-red-500/20',
+      trend: portfolioStats.returnsPercent >= 0 ? 'up' : 'down'
+    },
+    { 
+      title: isHindi ? 'दैनिक लाभ/हानि' : 'Daily P&L', 
+      value: formatCurrency(portfolioStats.dailyPnL), 
+      change: isHindi ? 'आज' : 'Today', 
+      icon: <TrendingUp className="w-5 h-5" />,
+      color: portfolioStats.dailyPnL >= 0 ? 'text-emerald-400' : 'text-red-400',
+      bgColor: portfolioStats.dailyPnL >= 0 ? 'bg-emerald-500/20' : 'bg-red-500/20',
+      trend: portfolioStats.dailyPnL >= 0 ? 'up' : 'down'
+    },
+    { 
+      title: isHindi ? 'जीत दर' : 'Win Rate', 
+      value: portfolioStats.winRate, 
+      change: '90%+ Target', 
+      icon: <Target className="w-5 h-5" />,
+      color: 'text-cyan-400',
+      bgColor: 'bg-cyan-500/20',
+      trend: 'neutral'
+    },
+    { 
+      title: isHindi ? 'सक्रिय ट्रेड' : 'Active Trades', 
+      value: portfolioStats.activeTrades.toString(), 
+      change: `${portfolioStats.holdingsCount} ${isHindi ? 'होल्डिंग्स' : 'Holdings'}`, 
+      icon: <Activity className="w-5 h-5" />,
+      color: 'text-purple-400',
+      bgColor: 'bg-purple-500/20',
+      trend: 'neutral'
+    }
+  ], [portfolioStats, isHindi, formatCurrency, safeToFixed]);
 
-    return [
-      { 
-        title: isHindi ? 'पोर्टफोलियो मूल्य' : 'Portfolio Value', 
-        value: formatCurrency(totalValue), 
-        change: `${returnsPercent >= 0 ? '+' : ''}${safeToFixed(returnsPercent)}%`, 
-        icon: <DollarSign className="w-5 h-5" />,
-        color: returnsPercent >= 0 ? 'text-emerald-400' : 'text-red-400',
-        bgColor: returnsPercent >= 0 ? 'bg-emerald-500/20' : 'bg-red-500/20',
-        trend: returnsPercent >= 0 ? 'up' : 'down'
-      },
-      { 
-        title: isHindi ? 'दैनिक लाभ/हानि' : 'Daily P&L', 
-        value: formatCurrency(dailyPnL), 
-        change: isHindi ? 'आज' : 'Today', 
-        icon: <TrendingUpIcon className="w-5 h-5" />,
-        color: dailyPnL >= 0 ? 'text-emerald-400' : 'text-red-400',
-        bgColor: dailyPnL >= 0 ? 'bg-emerald-500/20' : 'bg-red-500/20',
-        trend: dailyPnL >= 0 ? 'up' : 'down'
-      },
-      { 
-        title: isHindi ? 'जीत दर' : 'Win Rate', 
-        value: winRate, 
-        change: '90%+ लक्ष्य', 
-        icon: <Target className="w-5 h-5" />,
-        color: 'text-cyan-400',
-        bgColor: 'bg-cyan-500/20',
-        trend: 'neutral'
-      },
-      { 
-        title: isHindi ? 'सक्रिय ट्रेड' : 'Active Trades', 
-        value: activeTrades.toString(), 
-        change: `${holdingsCount} ${isHindi ? 'होल्डिंग्स' : 'holdings'}`, 
-        icon: <Activity className="w-5 h-5" />,
-        color: 'text-purple-400',
-        bgColor: 'bg-purple-500/20',
-        trend: 'neutral'
-      }
-    ];
-  }, [portfolioStats, isHindi, formatCurrency, safeToFixed]);
-
-  // CONNECTION STATUS DISPLAY
   const connectionStatusDisplay = useMemo(() => {
-    if (isBackendConnected && connectionStatus.api) {
+    if (isBackendConnected) {
       return {
         text: isHindi ? 'बैकेंड कनेक्टेड' : 'Backend Connected',
         subtext: isHindi ? 'सक्रिय • रियल-टाइम डेटा' : 'Active • Real-time Data',
@@ -514,41 +513,32 @@ const Dashboard = () => {
       color: 'text-red-400',
       bg: 'bg-red-500/20'
     };
-  }, [isBackendConnected, connectionStatus.api, isHindi]);
+  }, [isBackendConnected, isHindi]);
 
-  // HANDLE REFRESH
-  const handleRefresh = useCallback(() => {
-    fetchAllData();
-    setLastUpdate(new Date());
-  }, [fetchAllData]);
+  // ======================
+  // RENDER
+  // ======================
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-3 md:p-6 dashboard-container">
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-3 md:p-6">
       
-      {/* HEADER SECTION */}
-      <div className="mb-6 md:mb-8">
-        <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-4">
-          <div className="flex-1">
-            <div className="flex items-center space-x-3">
-              <div className="p-2 rounded-xl bg-gradient-to-r from-emerald-600/20 to-cyan-600/20">
-                <Zap className="w-6 h-6 text-emerald-400" />
-              </div>
-              <div>
-                <h1 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
-                  {isHindi ? 'वेलॉक्स ट्रेड एआई' : 'VeloxTrade AI'}
-                </h1>
-                <p className="text-sm text-emerald-300/80 mt-1">
-                  {isHindi ? '90%+ सटीकता वाला रियल-टाइम ट्रेडिंग सहायक' : 'Real-time trading assistant with 90%+ accuracy'}
-                </p>
-              </div>
-            </div>
+      {/* HEADER */}
+      <div className="mb-6">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-bold text-white">
+              {isHindi ? 'वेलॉक्स ट्रेड एआई' : 'VeloxTrade AI'}
+            </h1>
+            <p className="text-sm text-emerald-300/80 mt-1">
+              {isHindi ? 'रियल-टाइम ट्रेडिंग सहायक • 90%+ सटीकता' : 'Real-time trading assistant • 90%+ accuracy'}
+            </p>
           </div>
           
           <div className="flex items-center space-x-3">
             <button
               onClick={handleRefresh}
-              disabled={loading.stocks || loading.portfolio}
-              className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600/20 to-cyan-600/20 border border-emerald-500/30 hover:border-emerald-400/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={loading.stocks}
+              className="flex items-center space-x-2 px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-600/20 to-cyan-600/20 border border-emerald-500/30 hover:border-emerald-400/50 transition-all disabled:opacity-50"
             >
               <RefreshCw className={`w-4 h-4 ${loading.stocks ? 'animate-spin' : ''} text-emerald-400`} />
               <span className="text-sm text-emerald-300">{isHindi ? 'रिफ्रेश' : 'Refresh'}</span>
@@ -561,84 +551,76 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* CONNECTION & STATUS BAR */}
-        <div className="bg-gradient-to-r from-slate-800/50 to-slate-900/30 rounded-2xl p-4 border border-emerald-900/40 mb-6">
+        {/* STATUS BAR */}
+        <div className="bg-gradient-to-r from-slate-800/50 to-slate-900/30 rounded-xl p-4 border border-emerald-900/40 mb-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center space-x-3">
-              <div className={`p-2.5 rounded-xl ${connectionStatusDisplay.bg}`}>
+              <div className={`p-2 rounded-lg ${connectionStatusDisplay.bg}`}>
                 {connectionStatusDisplay.icon}
               </div>
               <div>
-                <h3 className="font-medium text-white">
-                  {connectionStatusDisplay.text}
-                </h3>
-                <p className="text-xs text-emerald-300/70">
-                  {connectionStatusDisplay.subtext}
-                </p>
+                <h3 className="font-medium text-white">{connectionStatusDisplay.text}</h3>
+                <p className="text-xs text-emerald-300/70">{connectionStatusDisplay.subtext}</p>
               </div>
             </div>
             
             <div className="flex items-center space-x-3">
               <div className={`px-3 py-1.5 rounded-full text-xs font-medium ${
-                marketStatus?.isOpen 
+                marketStatus.isOpen 
                   ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
                   : 'bg-red-500/20 text-red-400 border border-red-500/30'
               }`}>
                 <div className="flex items-center space-x-1.5">
                   <div className={`w-2 h-2 rounded-full ${
-                    marketStatus?.isOpen ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'
+                    marketStatus.isOpen ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'
                   }`}></div>
                   <span>
-                    {marketStatus?.isOpen 
+                    {marketStatus.isOpen 
                       ? (isHindi ? 'बाजार खुला' : 'MARKET OPEN') 
                       : (isHindi ? 'बाजार बंद' : 'MARKET CLOSED')}
                   </span>
                 </div>
               </div>
               
-              <div className="flex items-center space-x-2">
+              <div className="hidden md:flex items-center space-x-2">
                 {connectionStatus.broker && (
                   <div className="px-2 py-1 bg-cyan-500/20 text-cyan-400 text-xs rounded-full border border-cyan-500/30">
-                    {isHindi ? 'ब्रोकर जुड़ा' : 'Broker Connected'}
+                    {realBrokers.filter(b => b.is_active).length} {isHindi ? 'ब्रोकर' : 'Brokers'}
                   </div>
                 )}
-                
                 <div className="text-xs text-emerald-300/50">
-                  v3.0 • {language === 'hi' ? 'हिंदी' : 'English'} • {realBrokers.length} {isHindi ? 'ब्रोकर' : 'brokers'}
+                  v4.0 • {isHindi ? 'हिंदी' : 'English'}
                 </div>
               </div>
             </div>
           </div>
           
+          {/* MESSAGES */}
           {error && (
-            <div className="mt-3 p-3 bg-red-500/10 border border-red-500/30 rounded-lg flex items-center space-x-2">
+            <div className="mt-3 p-3 bg-red-500/10 border border-red-500/30 rounded-lg flex items-center space-x-2 animate-fadeIn">
               <AlertTriangle className="w-4 h-4 text-red-400" />
               <p className="text-red-400 text-sm">{error}</p>
             </div>
           )}
           
-          {!isBackendConnected && (
-            <div className="mt-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-              <p className="text-amber-400 text-sm">
-                {isHindi ? 
-                  'बैकेंड कनेक्ट नहीं है। डेमो डेटा दिखाया जा रहा है।' : 
-                  'Backend not connected. Showing demo data temporarily.'
-                }
-              </p>
+          {successMessage && (
+            <div className="mt-3 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg flex items-center space-x-2 animate-fadeIn">
+              <CheckCircle className="w-4 h-4 text-emerald-400" />
+              <p className="text-emerald-400 text-sm">{successMessage}</p>
             </div>
           )}
         </div>
       </div>
 
-      {/* STATS GRID - RESPONSIVE */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6 md:mb-8 stats-grid">
+      {/* STATS GRID */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
         {stats.map((stat, index) => (
           <div 
-            key={index} 
-            className="bg-gradient-to-br from-slate-800/50 to-slate-900/30 rounded-xl md:rounded-2xl p-4 border border-emerald-900/40 hover:border-emerald-500/50 transition-all duration-300"
+            key={index}
+            className="bg-gradient-to-br from-slate-800/50 to-slate-900/30 rounded-xl p-4 border border-emerald-900/40 hover:border-emerald-500/50 transition-all"
           >
             <div className="flex items-center justify-between mb-3">
-              <div className={`p-2 rounded-lg md:rounded-xl ${stat.bgColor}`}>
+              <div className={`p-2 rounded-lg ${stat.bgColor}`}>
                 <div className={stat.color}>{stat.icon}</div>
               </div>
               <div className="flex items-center space-x-1">
@@ -649,33 +631,27 @@ const Dashboard = () => {
                 {stat.trend === 'down' && <ChevronDown className="w-3.5 h-3.5 text-red-400" />}
               </div>
             </div>
-            <h3 className="text-lg md:text-xl lg:text-2xl font-bold text-white mb-1 truncate">
-              {stat.value}
-            </h3>
-            <p className="text-xs md:text-sm text-emerald-300/70 truncate">
-              {stat.title}
-            </p>
+            <h3 className="text-xl font-bold text-white mb-1">{stat.value}</h3>
+            <p className="text-sm text-emerald-300/70">{stat.title}</p>
           </div>
         ))}
       </div>
 
-      {/* MAIN CONTENT - RESPONSIVE */}
+      {/* MAIN CONTENT */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
-        {/* AI RECOMMENDATIONS - 2/3 width on desktop */}
+        {/* AI RECOMMENDATIONS */}
         <div className="lg:col-span-2">
-          <div className="bg-gradient-to-br from-slate-800/40 to-slate-900/30 rounded-xl md:rounded-2xl border border-emerald-900/40 p-4 md:p-5">
-            <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 md:mb-5 gap-3">
+          <div className="bg-gradient-to-br from-slate-800/40 to-slate-900/30 rounded-xl border border-emerald-900/40 p-4 md:p-5">
+            <div className="flex flex-col md:flex-row md:items-center justify-between mb-5 gap-3">
               <div className="flex items-center space-x-2">
-                <div className="p-1.5 md:p-2 rounded-lg bg-gradient-to-r from-emerald-600/20 to-cyan-600/20">
-                  <Zap className="w-4 h-4 md:w-5 md:h-5 text-emerald-400" />
-                </div>
-                <h2 className="text-lg md:text-xl font-bold text-white">
+                <Zap className="w-5 h-5 text-emerald-400" />
+                <h2 className="text-lg font-bold text-white">
                   {isHindi ? 'एआई सिफ़ारिशें (90%+ सटीकता)' : 'AI Recommendations (90%+ Accuracy)'}
                 </h2>
               </div>
               
               <div className="flex items-center space-x-2">
-                <span className="px-2 md:px-3 py-1 bg-gradient-to-r from-emerald-600/20 to-cyan-600/20 text-emerald-400 text-xs rounded-full border border-emerald-500/30">
+                <span className="px-3 py-1 bg-gradient-to-r from-emerald-600/20 to-cyan-600/20 text-emerald-400 text-xs rounded-full border border-emerald-500/30">
                   {filteredStocks.length} {isHindi ? 'स्टॉक्स' : 'stocks'}
                 </span>
                 <div className="text-xs text-emerald-300/60">
@@ -684,10 +660,10 @@ const Dashboard = () => {
               </div>
             </div>
 
-            {/* FILTERS - RESPONSIVE */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 md:gap-3 mb-4 md:mb-6">
+            {/* FILTERS */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
               <div>
-                <label className="block text-xs text-emerald-300/70 mb-1 md:mb-2">{isHindi ? 'सिग्नल:' : 'Signal:'}</label>
+                <label className="block text-xs text-emerald-300/70 mb-2">{isHindi ? 'सिग्नल:' : 'Signal:'}</label>
                 <select
                   value={filters.signal}
                   onChange={(e) => setFilters({ ...filters, signal: e.target.value })}
@@ -696,12 +672,11 @@ const Dashboard = () => {
                   <option value="all" className="bg-slate-900">{isHindi ? 'सभी सिग्नल' : 'All Signals'}</option>
                   <option value="BUY" className="bg-slate-900">{isHindi ? 'खरीदें' : 'Buy'}</option>
                   <option value="SELL" className="bg-slate-900">{isHindi ? 'बेचें' : 'Sell'}</option>
-                  <option value="HOLD" className="bg-slate-900">{isHindi ? 'रोकें' : 'Hold'}</option>
                 </select>
               </div>
 
               <div>
-                <label className="block text-xs text-emerald-300/70 mb-1 md:mb-2">{isHindi ? 'जोखिम:' : 'Risk:'}</label>
+                <label className="block text-xs text-emerald-300/70 mb-2">{isHindi ? 'जोखिम:' : 'Risk:'}</label>
                 <select
                   value={filters.risk}
                   onChange={(e) => setFilters({ ...filters, risk: e.target.value })}
@@ -715,7 +690,7 @@ const Dashboard = () => {
               </div>
 
               <div>
-                <label className="block text-xs text-emerald-300/70 mb-1 md:mb-2">{isHindi ? 'समय:' : 'Time:'}</label>
+                <label className="block text-xs text-emerald-300/70 mb-2">{isHindi ? 'समय:' : 'Time:'}</label>
                 <select
                   value={filters.timeFrame}
                   onChange={(e) => setFilters({ ...filters, timeFrame: e.target.value })}
@@ -723,24 +698,18 @@ const Dashboard = () => {
                 >
                   <option value="intraday" className="bg-slate-900">{isHindi ? 'इंट्राडे' : 'Intraday'}</option>
                   <option value="swing" className="bg-slate-900">{isHindi ? 'स्विंग' : 'Swing'}</option>
-                  <option value="positional" className="bg-slate-900">{isHindi ? 'पोजिशनल' : 'Positional'}</option>
                 </select>
               </div>
             </div>
 
-            {/* STOCK CARDS */}
+            {/* STOCKS LIST */}
             {loading.stocks ? (
-              <div className="py-8 md:py-12 text-center">
+              <div className="py-12 text-center">
                 <RefreshCw className="w-8 h-8 text-emerald-400 animate-spin mx-auto mb-4" />
-                <p className="text-emerald-300">
-                  {isHindi ? 'एआई सिफ़ारिशें लोड हो रही हैं...' : 'Loading AI recommendations...'}
-                </p>
-                <p className="text-sm text-emerald-300/50 mt-2">
-                  {isHindi ? 'रियल-टाइम बाजार डेटा प्राप्त कर रहे हैं' : 'Fetching real-time market data'}
-                </p>
+                <p className="text-emerald-300">{isHindi ? 'एआई सिफ़ारिशें लोड हो रही हैं...' : 'Loading AI recommendations...'}</p>
               </div>
             ) : filteredStocks.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {filteredStocks.map((stock, index) => (
                   <StockCard
                     key={stock.symbol || index}
@@ -752,7 +721,7 @@ const Dashboard = () => {
                 ))}
               </div>
             ) : (
-              <div className="text-center py-8 md:py-12">
+              <div className="text-center py-12">
                 <Database className="w-12 h-12 text-emerald-400/40 mx-auto mb-4" />
                 <p className="text-emerald-300/70">
                   {isHindi ? 'कोई स्टॉक नहीं मिला' : 'No stocks found'}
@@ -771,10 +740,10 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* RIGHT SIDEBAR */}
+        {/* SIDEBAR */}
         <div className="space-y-4 md:space-y-6">
           {/* ACTIVE TRADES */}
-          <div className="bg-gradient-to-br from-slate-800/40 to-slate-900/30 rounded-xl md:rounded-2xl border border-emerald-900/40 p-4 md:p-5">
+          <div className="bg-gradient-to-br from-slate-800/40 to-slate-900/30 rounded-xl border border-emerald-900/40 p-4 md:p-5">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center space-x-2">
                 <Activity className="w-5 h-5 text-emerald-400" />
@@ -807,14 +776,14 @@ const Dashboard = () => {
                         ₹{safeToFixed(trade.pnl || 0)}
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="grid grid-cols-2 gap-2 text-xs mb-3">
                       <div>
                         <span className="text-emerald-300/60">Entry:</span>
-                        <span className="text-white ml-2">₹{safeToFixed(trade.entryPrice)}</span>
+                        <span className="text-white ml-2">₹{safeToFixed(trade.entry_price)}</span>
                       </div>
                       <div>
-                        <span className="text-emerald-300/60">Target:</span>
-                        <span className="text-white ml-2">₹{safeToFixed(trade.targetPrice)}</span>
+                        <span className="text-emerald-300/60">Current:</span>
+                        <span className="text-white ml-2">₹{safeToFixed(trade.current_price || trade.entry_price)}</span>
                       </div>
                     </div>
                     <button
@@ -822,21 +791,15 @@ const Dashboard = () => {
                         ...trade,
                         stock: { symbol: trade.symbol }
                       })}
-                      className="w-full mt-3 py-1.5 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-lg text-sm hover:from-red-700 hover:to-red-800 transition-all"
+                      className="w-full py-1.5 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-lg text-sm hover:from-red-700 hover:to-red-800 transition-all"
                     >
                       {isHindi ? 'बेचें' : 'Exit Trade'}
                     </button>
                   </div>
                 ))}
-                
-                {realTrades.length > 3 && (
-                  <button className="w-full py-2 text-center text-emerald-400 text-sm border border-emerald-900/40 rounded-lg hover:border-emerald-500/50 transition-all">
-                    {isHindi ? 'सभी ट्रेड देखें' : 'View All Trades'}
-                  </button>
-                )}
               </div>
             ) : (
-              <div className="text-center py-6 md:py-8">
+              <div className="text-center py-8">
                 <Activity className="w-8 h-8 text-emerald-400/40 mx-auto mb-2" />
                 <p className="text-emerald-300/70 text-sm">
                   {isHindi ? 'कोई सक्रिय ट्रेड नहीं' : 'No active trades'}
@@ -849,7 +812,7 @@ const Dashboard = () => {
           </div>
 
           {/* BROKER CONNECTIONS */}
-          <div className="bg-gradient-to-br from-slate-800/40 to-slate-900/30 rounded-xl md:rounded-2xl border border-emerald-900/40 p-4 md:p-5">
+          <div className="bg-gradient-to-br from-slate-800/40 to-slate-900/30 rounded-xl border border-emerald-900/40 p-4 md:p-5">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center space-x-2">
                 <Server className="w-5 h-5 text-cyan-400" />
@@ -873,7 +836,7 @@ const Dashboard = () => {
                         : 'bg-gradient-to-r from-slate-800/30 to-slate-900/20 border-red-500/30'
                     }`}
                   >
-                    <div className="flex justify-between items-center mb-2">
+                    <div className="flex justify-between items-center">
                       <div className="flex items-center space-x-2">
                         <div className={`w-2 h-2 rounded-full ${
                           broker.is_active ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'
@@ -882,47 +845,29 @@ const Dashboard = () => {
                           <p className="font-medium text-white">{broker.broker_name}</p>
                           <p className="text-xs text-emerald-300/60">
                             {broker.is_active 
-                              ? (isHindi ? 'सक्रिय • कनेक्टेड' : 'Active • Connected') 
-                              : (isHindi ? 'निष्क्रिय' : 'Inactive')}
+                              ? (isHindi ? 'कनेक्टेड' : 'Connected') 
+                              : (isHindi ? 'डिस्कनेक्टेड' : 'Disconnected')}
                           </p>
                         </div>
                       </div>
-                      <div className="text-xs text-emerald-300/60">
-                        {broker.account_type || 'Regular'}
-                      </div>
+                      {broker.balance && (
+                        <div className="text-sm text-white">
+                          ₹{safeToFixed(broker.balance)}
+                        </div>
+                      )}
                     </div>
-                    
-                    {broker.is_active && (
-                      <div className="grid grid-cols-2 gap-2 text-xs mt-2">
-                        {broker.balance && (
-                          <div>
-                            <span className="text-emerald-300/60">Balance:</span>
-                            <span className="text-white ml-1">₹{safeToFixed(broker.balance)}</span>
-                          </div>
-                        )}
-                        {broker.equity && (
-                          <div>
-                            <span className="text-emerald-300/60">Equity:</span>
-                            <span className="text-white ml-1">₹{safeToFixed(broker.equity)}</span>
-                          </div>
-                        )}
-                      </div>
-                    )}
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="text-center py-6 md:py-8">
+              <div className="text-center py-8">
                 <Server className="w-8 h-8 text-emerald-400/40 mx-auto mb-2" />
                 <p className="text-emerald-300/70 text-sm">
                   {isHindi ? 'कोई ब्रोकर नहीं जुड़ा' : 'No brokers connected'}
                 </p>
-                <p className="text-xs text-emerald-300/50 mt-1 mb-3">
-                  {isHindi ? 'ट्रेड करने के लिए ब्रोकर कनेक्ट करें' : 'Connect broker to start trading'}
-                </p>
                 <button 
                   onClick={() => window.location.href = '/broker-settings'}
-                  className="px-4 py-1.5 bg-gradient-to-r from-emerald-600 to-cyan-600 text-white rounded-lg text-sm hover:from-emerald-700 hover:to-cyan-700 transition-all"
+                  className="mt-3 px-4 py-1.5 bg-gradient-to-r from-emerald-600 to-cyan-600 text-white rounded-lg text-sm hover:from-emerald-700 hover:to-cyan-700 transition-all"
                 >
                   {isHindi ? 'ब्रोकर कनेक्ट करें' : 'Connect Broker'}
                 </button>
@@ -931,7 +876,7 @@ const Dashboard = () => {
           </div>
 
           {/* MARKET INSIGHTS */}
-          <div className="bg-gradient-to-br from-slate-800/40 to-slate-900/30 rounded-xl md:rounded-2xl border border-emerald-900/40 p-4 md:p-5">
+          <div className="bg-gradient-to-br from-slate-800/40 to-slate-900/30 rounded-xl border border-emerald-900/40 p-4 md:p-5">
             <div className="flex items-center space-x-2 mb-4">
               <BarChart2 className="w-5 h-5 text-emerald-400" />
               <h2 className="text-lg font-bold text-white">
@@ -973,22 +918,12 @@ const Dashboard = () => {
                   </p>
                 </div>
               </div>
-              
-              <div className="p-3 rounded-lg bg-gradient-to-r from-slate-800/50 to-slate-900/30 border border-emerald-900/30">
-                <p className="text-xs text-emerald-300/60 mb-1">{isHindi ? 'आज का लक्ष्य' : "Today's Target"}</p>
-                <p className="text-sm text-white font-medium">
-                  {isHindi ? 
-                    '₹10,000+ लाभ • 90%+ सटीकता बनाए रखें' : 
-                    '₹10,000+ Profit • Maintain 90%+ Accuracy'
-                  }
-                </p>
-              </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* ENTRY POPUP */}
+      {/* POPUPS */}
       {popupData && (
         <EntryPopup
           data={popupData}
@@ -998,7 +933,6 @@ const Dashboard = () => {
         />
       )}
 
-      {/* EXIT POPUP */}
       {exitPopupData && (
         <ExitPopup
           data={exitPopupData}
@@ -1008,30 +942,14 @@ const Dashboard = () => {
         />
       )}
 
-      {/* MOBILE BOTTOM BAR */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur-lg border-t border-emerald-900/40 p-3">
-        <div className="flex justify-between items-center">
-          <div className="text-center">
-            <div className={`w-2 h-2 rounded-full mx-auto mb-1 ${
-              isBackendConnected ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'
-            }`}></div>
-            <span className="text-xs text-emerald-300">
-              {isBackendConnected ? (isHindi ? 'कनेक्टेड' : 'Connected') : (isHindi ? 'असक्षम' : 'Offline')}
-            </span>
-          </div>
-          
-          <button
-            onClick={handleRefresh}
-            className="p-2 rounded-full bg-gradient-to-r from-emerald-600 to-cyan-600"
-          >
-            <RefreshCw className="w-5 h-5 text-white" />
-          </button>
-          
-          <div className="text-center">
-            <div className="text-xs text-emerald-300/60">{formatTime(lastUpdate)}</div>
-            <div className="text-xs text-emerald-300">{filteredStocks.length} {isHindi ? 'स्टॉक' : 'stocks'}</div>
-          </div>
-        </div>
+      {/* FOOTER */}
+      <div className="mt-8 pt-6 border-t border-emerald-900/30 text-center">
+        <p className="text-xs text-emerald-300/50">
+          {isHindi ? 'वेलॉक्स ट्रेड एआई v4.0 • प्रीमियम ट्रेडिंग प्लेटफॉर्म' : 'VeloxTrade AI v4.0 • Premium Trading Platform'}
+        </p>
+        <p className="text-xs text-emerald-300/30 mt-1">
+          {isHindi ? 'रियल-टाइम डेटा • सुरक्षित कनेक्शन • 90%+ सटीकता' : 'Real-time Data • Secure Connection • 90%+ Accuracy'}
+        </p>
       </div>
     </div>
   );
