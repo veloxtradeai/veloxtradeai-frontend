@@ -240,7 +240,7 @@ export const analyticsAPI = {
   }
 };
 
-// Settings API (for Settings.jsx)
+// Settings API (for Settings.jsx) - UPDATED WITH saveSettings
 export const settingsAPI = {
   updateProfile: async (profileData) => {
     const userId = localStorage.getItem('user_id') || 'demo_user';
@@ -272,6 +272,15 @@ export const settingsAPI = {
         new_password: newPassword,
         user_id: userId 
       })
+    });
+  },
+  
+  // NEW FUNCTION ADDED: saveSettings
+  saveSettings: async (settings) => {
+    const userId = localStorage.getItem('user_id') || 'demo_user';
+    return await makeRequest('/api/settings', {
+      method: 'PUT',
+      body: JSON.stringify({ ...settings, user_id: userId })
     });
   }
 };
