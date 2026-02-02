@@ -231,7 +231,7 @@ const StockCard = ({ stock, onTrade, connectionStatus, isHindi }) => {
             </div>
           </div>
         </div>
-      )}
+      )} 
     </div>
   );
 };
